@@ -154,6 +154,37 @@ struct UIContext : BaseComponent {
     // if(was_click){play_sound();}
     return was_click;
   }
+
+  void process_tabbing(EntityID id) {
+    /*
+      // TODO How do we handle something that wants to use
+      // Widget Value Down/Up to control the value?
+      // Do we mark the widget type with "nextable"? (tab will always work but
+      // not very discoverable
+      if (has_focus(id)) {
+        if (
+            //
+            pressed(InputName::WidgetNext) || pressed(InputName::ValueDown)
+            // TODO add support for holding down tab
+            // get().is_held_down_debounced(InputName::WidgetNext) ||
+            // get().is_held_down_debounced(InputName::ValueDown)
+        ) {
+          set_focus(ROOT);
+          if (is_held_down(InputName::WidgetMod)) {
+            set_focus(last_processed);
+          }
+        }
+        if (pressed(InputName::ValueUp)) {
+          set_focus(last_processed);
+        }
+        if (pressed(InputName::WidgetBack)) {
+          set_focus(last_processed);
+        }
+      }
+      // before any returns
+      last_processed = id;
+      */
+  }
 };
 
 struct BeginUIContextManager : System<UIContext> {
@@ -245,23 +276,14 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
   }
 };
 
-struct HandleTabbing : SystemWithUIContext<Transform> {
+struct HandleTabbing : SystemWithUIContext<> {
   virtual ~HandleTabbing() {}
 
-  virtual void for_each_with(Entity &entity, UIComponent &,
-                             Transform &transform, float) override {
+  virtual void for_each_with(Entity &entity, UIComponent &, float) override {
     if (!context_entity)
       return;
     UIContext &context = context_entity->get<UIContext>();
-
-    context.active_if_mouse_inside(entity.id, transform.rect());
-    context.try_to_grab(entity.id);
-    // draw focus ring
-    // handle tabbing
-
-    if (context.is_mouse_click(entity.id)) {
-      context.set_focus(entity.id);
-    }
+    context.process_tabbing(entity.id);
   }
 };
 
