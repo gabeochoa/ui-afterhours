@@ -98,6 +98,7 @@ enum class InputAction {
   None,
   WidgetNext,
   WidgetMod,
+  WidgetPress,
   ValueDown,
   ValueUp,
 };
@@ -108,6 +109,10 @@ auto get_mapping() {
   std::map<InputAction, input::ValidInputs> mapping;
   mapping[InputAction::WidgetNext] = {
       raylib::KEY_TAB,
+  };
+
+  mapping[InputAction::WidgetPress] = {
+      raylib::KEY_ENTER,
   };
 
   mapping[InputAction::ValueUp] = {
@@ -337,6 +342,12 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
     UIContext &context = context_entity->get<UIContext>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
+
+    if (context.has_focus(entity.id) &&
+        context.pressed(InputAction::WidgetPress)) {
+      context.set_focus(entity.id);
+      hasClickListener.cb(entity);
+    }
 
     if (context.is_mouse_click(entity.id)) {
       context.set_focus(entity.id);
