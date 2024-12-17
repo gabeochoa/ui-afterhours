@@ -94,6 +94,34 @@ struct RenderAvailableResolutions
   }
 };
 
+enum class InputAction {
+  None,
+  WidgetNext,
+  WidgetMod,
+  ValueDown,
+  ValueUp,
+};
+
+using afterhours::input::InputCollector;
+
+auto get_mapping() {
+  std::map<InputAction, input::ValidInputs> mapping;
+  mapping[InputAction::WidgetNext] = {
+      raylib::KEY_TAB,
+  };
+
+  mapping[InputAction::ValueUp] = {
+      raylib::KEY_UP,
+  };
+  mapping[InputAction::ValueDown] = {
+      raylib::KEY_DOWN,
+  };
+  mapping[InputAction::WidgetMod] = {
+      raylib::KEY_LEFT_SHIFT,
+  };
+  return mapping;
+}
+
 namespace ui {
 inline bool is_mouse_inside(const input::MousePosition &mouse_pos,
                             const raylib::Rectangle &rect) {
@@ -115,6 +143,7 @@ struct UIContext : BaseComponent {
 
   input::MousePosition mouse_pos;
   bool mouseLeftDown;
+  InputAction last_action;
 
   [[nodiscard]] bool is_hot(EntityID id) { return hot_id == id; };
   [[nodiscard]] bool is_active(EntityID id) { return active_id == id; };
@@ -155,35 +184,42 @@ struct UIContext : BaseComponent {
     return was_click;
   }
 
+  [[nodiscard]] bool pressed(const InputAction &name) {
+    bool a = last_action == name;
+    if (a) {
+      // ui::sounds::select();
+      last_action = InputAction::None;
+    }
+    return a;
+  }
+
   void process_tabbing(EntityID id) {
-    /*
-      // TODO How do we handle something that wants to use
-      // Widget Value Down/Up to control the value?
-      // Do we mark the widget type with "nextable"? (tab will always work but
-      // not very discoverable
-      if (has_focus(id)) {
-        if (
-            //
-            pressed(InputName::WidgetNext) || pressed(InputName::ValueDown)
-            // TODO add support for holding down tab
-            // get().is_held_down_debounced(InputName::WidgetNext) ||
-            // get().is_held_down_debounced(InputName::ValueDown)
-        ) {
-          set_focus(ROOT);
-          if (is_held_down(InputName::WidgetMod)) {
-            set_focus(last_processed);
-          }
-        }
-        if (pressed(InputName::ValueUp)) {
-          set_focus(last_processed);
-        }
-        if (pressed(InputName::WidgetBack)) {
-          set_focus(last_processed);
-        }
+    // TODO How do we handle something that wants to use
+    // Widget Value Down/Up to control the value?
+    // Do we mark the widget type with "nextable"? (tab will always work but
+    // not very discoverable
+    if (has_focus(id)) {
+      if (
+          //
+          pressed(InputAction::WidgetNext) || pressed(InputAction::ValueDown)
+          // TODO add support for holding down tab
+          // get().is_held_down_debounced(InputAction::WidgetNext) ||
+          // get().is_held_down_debounced(InputAction::ValueDown)
+      ) {
+        set_focus(ROOT);
+        // if (is_held_down(InputAction::WidgetMod)) {
+        // set_focus(last_processed);
+        // }
       }
-      // before any returns
-      last_processed = id;
-      */
+      if (pressed(InputAction::ValueUp)) {
+        set_focus(last_processed);
+      }
+      // if (pressed(InputAction::WidgetBack)) {
+      // set_focus(last_processed);
+      // }
+    }
+    // before any returns
+    last_processed = id;
   }
 };
 
@@ -192,7 +228,23 @@ struct BeginUIContextManager : System<UIContext> {
     context.mouse_pos = input::get_mouse_position();
     context.mouseLeftDown = input::is_mouse_button_down(0);
 
-    context.hot_id = context.ROOT;
+    if (context.last_action == InputAction::None) {
+      input::PossibleInputCollector<InputAction> inpc =
+          input::get_input_collector<InputAction>();
+      if (inpc.has_value()) {
+        for (auto &actions_done : inpc.inputs_pressed()) {
+          if (actions_done.medium != input::DeviceMedium::Keyboard)
+            continue;
+          if (actions_done.amount_pressed <= 0.f)
+            continue;
+          if (actions_done.length_pressed <= 0.f)
+            continue;
+          context.last_action = actions_done.action;
+        }
+      }
+
+      context.hot_id = context.ROOT;
+    }
   }
 };
 
@@ -265,9 +317,6 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
     UIContext &context = context_entity->get<UIContext>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
-    context.try_to_grab(entity.id);
-    // draw focus ring
-    // handle tabbing
 
     if (context.is_mouse_click(entity.id)) {
       context.set_focus(entity.id);
@@ -283,6 +332,7 @@ struct HandleTabbing : SystemWithUIContext<> {
     if (!context_entity)
       return;
     UIContext &context = context_entity->get<UIContext>();
+    context.try_to_grab(entity.id);
     context.process_tabbing(entity.id);
   }
 };
@@ -330,6 +380,7 @@ int main(void) {
   // sophie
   {
     auto &entity = EntityHelper::createEntity();
+    input::add_singleton_components<InputAction>(entity, get_mapping());
     window_manager::add_singleton_components(
         entity, window_manager::Resolution{screenWidth, screenHeight}, 200,
         get_resolutions());
@@ -338,13 +389,21 @@ int main(void) {
 
   ui::make_button(vec2{200, 200});
   ui::make_button(vec2{200, 250});
+  ui::make_button(vec2{200, 300});
 
   SystemManager systems;
 
   // debug systems
-  { window_manager::enforce_singletons(systems); }
+  {
+    window_manager::enforce_singletons(systems);
+    input::enforce_singletons<InputAction>(systems);
+  }
+
+  // external plugins
+  { input::register_update_systems<InputAction>(systems); }
 
   systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
+  systems.register_update_system(std::make_unique<ui::HandleTabbing>());
   systems.register_update_system(std::make_unique<ui::HandleClicks>());
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
