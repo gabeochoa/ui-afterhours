@@ -324,6 +324,11 @@ struct HasLabel : BaseComponent {
   HasLabel(const std::string &str) : label(str) {}
 };
 
+struct HasCheckboxState : BaseComponent {
+  bool on;
+  HasCheckboxState(bool b) : on(b) {}
+};
+
 // TODO i like this but for Tags, i wish
 // the user of this didnt have to add UIComponent to their for_each_with
 template <typename... Components>
@@ -409,6 +414,23 @@ void make_button(vec2 position) {
   });
 }
 
+void make_checkbox(vec2 position) {
+  auto &entity = EntityHelper::createEntity();
+  entity.addComponent<ui::UIComponent>();
+  entity.addComponent<ui::Transform>(position, vec2{50, 25});
+  entity.addComponent<ui::HasColor>(raylib::BLUE);
+  entity.addComponent<ui::HasCheckboxState>(false);
+  entity.addComponent<ui::HasLabel>(
+      raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " "));
+  entity.addComponent<ui::HasClickListener>([](Entity &entity) {
+    std::cout << "I clicked the checkbox" << entity.id << std::endl;
+    entity.get<ui::HasCheckboxState>().on =
+        !entity.get<ui::HasCheckboxState>().on;
+    entity.get<ui ::HasLabel>().label =
+        raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " ");
+  });
+}
+
 } // namespace ui
 
 int main(void) {
@@ -430,7 +452,7 @@ int main(void) {
 
   ui::make_button(vec2{200, 200});
   ui::make_button(vec2{200, 250});
-  ui::make_button(vec2{200, 300});
+  ui::make_checkbox(vec2{200, 300});
 
   SystemManager systems;
 
