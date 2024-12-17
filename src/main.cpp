@@ -27,14 +27,14 @@ constexpr float distance_sq(const vec2 a, const vec2 b) {
   return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 }
 
-namespace util {
+namespace myutil {
 
 template <class... Ts> struct overloaded : Ts... {
   using Ts::operator()...;
 };
 
 template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
-} // namespace util
+} // namespace myutil
 
 // TODO i kinda dont like that you have to do this even if you dont want to
 // customize it
@@ -144,6 +144,7 @@ struct UIContext : BaseComponent {
   input::MousePosition mouse_pos;
   bool mouseLeftDown;
   InputAction last_action;
+  std::bitset<magic_enum::enum_count<InputAction>()> all_actions;
 
   [[nodiscard]] bool is_hot(EntityID id) { return hot_id == id; };
   [[nodiscard]] bool is_active(EntityID id) { return active_id == id; };
@@ -193,11 +194,21 @@ struct UIContext : BaseComponent {
     return a;
   }
 
+  [[nodiscard]] bool is_held_down(const InputAction &name) {
+    bool a = all_actions[magic_enum::enum_index<InputAction>(name).value()];
+    if (a) {
+      // ui::sounds::select();
+      all_actions[magic_enum::enum_index<InputAction>(name).value()] = false;
+    }
+    return a;
+  }
+
   void process_tabbing(EntityID id) {
     // TODO How do we handle something that wants to use
     // Widget Value Down/Up to control the value?
     // Do we mark the widget type with "nextable"? (tab will always work but
     // not very discoverable
+
     if (has_focus(id)) {
       if (
           //
@@ -207,9 +218,9 @@ struct UIContext : BaseComponent {
           // get().is_held_down_debounced(InputAction::ValueDown)
       ) {
         set_focus(ROOT);
-        // if (is_held_down(InputAction::WidgetMod)) {
-        // set_focus(last_processed);
-        // }
+        if (is_held_down(InputAction::WidgetMod)) {
+          set_focus(last_processed);
+        }
       }
       if (pressed(InputAction::ValueUp)) {
         set_focus(last_processed);
@@ -224,27 +235,36 @@ struct UIContext : BaseComponent {
 };
 
 struct BeginUIContextManager : System<UIContext> {
+
+  // TODO this should live inside input_system
+  // but then it would require magic_enum as a dependency
+  std::bitset<magic_enum::enum_count<InputAction>()> inputs_as_bits(
+      const std::vector<input::ActionDone<InputAction>> &inputs) const {
+    std::bitset<magic_enum::enum_count<InputAction>()> output;
+    for (auto &input : inputs) {
+      if (input.amount_pressed <= 0.f)
+        continue;
+      output[magic_enum::enum_index<InputAction>(input.action).value()] = true;
+    }
+    return output;
+  }
+
   virtual void for_each_with(Entity &, UIContext &context, float) override {
     context.mouse_pos = input::get_mouse_position();
     context.mouseLeftDown = input::is_mouse_button_down(0);
 
-    if (context.last_action == InputAction::None) {
+    {
       input::PossibleInputCollector<InputAction> inpc =
           input::get_input_collector<InputAction>();
       if (inpc.has_value()) {
+        context.all_actions = inputs_as_bits(inpc.inputs());
         for (auto &actions_done : inpc.inputs_pressed()) {
-          if (actions_done.medium != input::DeviceMedium::Keyboard)
-            continue;
-          if (actions_done.amount_pressed <= 0.f)
-            continue;
-          if (actions_done.length_pressed <= 0.f)
-            continue;
           context.last_action = actions_done.action;
         }
       }
-
-      context.hot_id = context.ROOT;
     }
+
+    context.hot_id = context.ROOT;
   }
 };
 
