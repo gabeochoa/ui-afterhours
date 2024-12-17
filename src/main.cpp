@@ -69,6 +69,8 @@ std::vector<window_manager::Resolution> get_resolutions() {
   return resolutions;
 }
 
+const vec2 button_size = vec2{100, 50};
+
 enum class InputAction {
   None,
   WidgetNext,
@@ -304,6 +306,7 @@ struct HasDragListener : BaseComponent {
 struct HasLabel : BaseComponent {
   std::string label;
   HasLabel(const std::string &str) : label(str) {}
+  HasLabel() : label("") {}
 };
 
 struct HasCheckboxState : BaseComponent {
@@ -315,14 +318,17 @@ struct HasDropdownState : HasCheckboxState {
   using Options = std::vector<std::string>;
   Options options;
   std::function<Options(void)> fetch_options;
+  std::function<void(size_t)> on_option_changed;
+  size_t last_option_clicked = 0;
 
   HasDropdownState(const Options &opts,
-                   const std::function<Options(void)> fetch_opts = nullptr)
-      : HasCheckboxState(false), options(opts), fetch_options(fetch_opts) {}
+                   const std::function<Options(void)> fetch_opts = nullptr,
+                   const std::function<void(size_t)> opt_changed = nullptr)
+      : HasCheckboxState(false), options(opts), fetch_options(fetch_opts),
+        on_option_changed(opt_changed) {}
 
   HasDropdownState(const std::function<Options(void)> fetch_opts)
-      : HasCheckboxState(false), options(fetch_opts()),
-        fetch_options(fetch_opts) {}
+      : HasDropdownState(fetch_opts(), fetch_opts, nullptr) {}
 };
 
 struct HasSliderState : BaseComponent {
@@ -440,24 +446,88 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
     raylib::DrawRectangleV(transform.position, transform.size, col);
     if (entity.has<HasLabel>()) {
       DrawText(entity.get<HasLabel>().label.c_str(), transform.position.x,
-               transform.position.y, transform.size.y / 2.f, raylib::RAYWHITE);
+               transform.position.y, (int)transform.size.y / 2.f,
+               raylib::RAYWHITE);
     }
   }
 };
 
-struct UpdateDropdownOptions : SystemWithUIContext<HasDropdownState> {
+struct UpdateDropdownOptions
+    : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
   virtual void for_each_with(Entity &entity, UIComponent &,
+                             Transform &transform,
                              HasDropdownState &hasDropdownState,
+                             HasChildrenComponent &hasChildren,
                              float) override {
 
-    // Isnt dynamic
-    if (!hasDropdownState.fetch_options)
-      return;
-    hasDropdownState.options = hasDropdownState.fetch_options();
+    // TODO maybe we should fetch only once a second or something?
+    const auto options = hasDropdownState.fetch_options();
+
+    if (options.size() == hasDropdownState.options.size()) {
+      bool any_changed = false;
+      for (size_t i = 0; i < options.size(); i++) {
+        auto option = options[i];
+        auto old_option = hasDropdownState.options[i];
+        if (option != old_option) {
+          any_changed = true;
+          break;
+        }
+      }
+
+      // no need to regenerate UI
+      if (!any_changed)
+        return;
+    }
+    std::cout << " up" << options.size() << " "
+              << hasDropdownState.options.size() << std::endl;
+
+    // update the children
+
+    // delete existing
+    {
+      for (auto &child_id : hasChildren.children) {
+        EntityHelper::markIDForCleanup(child_id);
+      }
+      hasChildren.children.clear();
+    }
+
+    for (size_t i = 0; i < options.size(); i++) {
+      auto &option = options[i];
+      auto &child = EntityHelper::createEntity();
+      entity.get<HasChildrenComponent>().add_child(child.id);
+      child.addComponent<ui::UIComponent>();
+      child.addComponent<ui::Transform>(
+          transform.position + vec2{0, button_size.y * (i + 1)}, button_size);
+      child.addComponent<ui::HasColor>(raylib::PURPLE);
+      child.addComponent<ui::HasLabel>(option);
+      child.addComponent<ui::ShouldHide>();
+
+      child.addComponent<ui::HasClickListener>([i, &entity,
+                                                &options](Entity &) {
+        std::cout << " i " << i << "\n";
+        ui::HasDropdownState &hds = entity.get<ui::HasDropdownState>();
+        if (hds.on_option_changed)
+          hds.on_option_changed(i);
+        entity.get<ui::HasDropdownState>().last_option_clicked = i;
+        entity.get<ui::HasClickListener>().cb(entity);
+
+        OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
+        opt_context->get<ui::UIContext>().set_focus(entity.id);
+
+        entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
+      });
+    }
+
+    hasDropdownState.last_option_clicked =
+        (size_t)std::max(std::min((int)options.size() - 1,
+                                  (int)hasDropdownState.last_option_clicked),
+                         0);
+    entity.get<HasLabel>().label =
+        options[hasDropdownState.last_option_clicked];
+
+    hasDropdownState.options = options;
   }
 };
-
-const vec2 button_size = vec2{100, 50};
 
 void make_button(vec2 position) {
   auto &entity = EntityHelper::createEntity();
@@ -540,56 +610,32 @@ void make_slider(vec2 position) {
   background.get<ui::HasChildrenComponent>().add_child(handle.id);
 }
 
-void make_dropdown(
-    vec2 position,
-    const std::function<ui::HasDropdownState::Options(void)> &fn) {
+void make_dropdown(vec2 position,
+                   const std::function<ui::HasDropdownState::Options(void)> &fn,
+                   const std::function<void(size_t)> &on_change = nullptr) {
   auto &dropdown = EntityHelper::createEntity();
   dropdown.addComponent<ui::UIComponent>();
   dropdown.addComponent<ui::Transform>(position, button_size);
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
-  dropdown.addComponent<ui::HasDropdownState>(fn);
-
-  auto options = fn();
-
-  dropdown.addComponent<ui::HasLabel>(options[0]);
-
+  dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
+                                              fn, on_change);
+  dropdown.addComponent<ui::HasLabel>();
   dropdown.addComponent<ui::HasChildrenComponent>();
-  float yoff = 1;
-  for (auto &option : options) {
-    auto &child = EntityHelper::createEntity();
-    child.addComponent<ui::UIComponent>();
-    child.addComponent<ui::Transform>(
-        position + vec2{0, button_size.y * (yoff++)}, button_size);
-    child.addComponent<ui::HasColor>(raylib::PURPLE);
-    child.addComponent<ui::HasLabel>(option);
-    child.addComponent<ui::ShouldHide>();
-    child.addComponent<ui::HasClickListener>([&](Entity &entity) {
-      std::cout << "clicked on " << option << std::endl;
-      dropdown.get<ui::HasLabel>().label = entity.get<HasLabel>().label;
-      dropdown.get<ui::HasClickListener>().cb(dropdown);
-
-      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
-      opt_context->get<ui::UIContext>().set_focus(dropdown.id);
-    });
-
-    dropdown.get<HasChildrenComponent>().add_child(child.id);
-  }
-
-  //
   dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
-    entity.get<ui::HasDropdownState>().on =
-        !entity.get<ui::HasDropdownState>().on;
-    std::cout << "dropdown " << entity.get<ui::HasDropdownState>().on
-              << std::endl;
+    bool nv = !entity.get<ui::HasDropdownState>().on;
+    std::cout << "dropdown " << nv << " " << std::endl;
 
     for (auto id : entity.get<HasChildrenComponent>().children) {
       auto opt_child = EQ().whereID(id).gen_first();
-      if (entity.get<ui::HasDropdownState>().on) {
+      // std::cout << opt_child->id << std::endl;
+      if (nv) {
         opt_child->removeComponent<ShouldHide>();
       } else {
         opt_child->addComponent<ShouldHide>();
       }
     }
+
+    entity.get<ui::HasDropdownState>().on = nv;
   });
 }
 
@@ -622,14 +668,22 @@ int main(void) {
   ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
-  ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
-    std::vector<std::string> resolutions;
-    for (auto &rez : get_resolutions()) {
-      std::string fmt = raylib::TextFormat("%i x %i", rez.width, rez.height);
-      resolutions.push_back(fmt);
-    }
-    return resolutions;
-  });
+  ui::make_dropdown(
+      vec2{400, y},
+      []() {
+        std::vector<std::string> resolutions;
+        for (auto &rez : get_resolutions()) {
+          std::string fmt =
+              raylib::TextFormat("%i x %i", rez.width, rez.height);
+          resolutions.push_back(fmt);
+        }
+        return resolutions;
+      },
+      [](size_t index) {
+        std::cout << "click" << index << "\n";
+        auto resolution = get_resolutions()[index];
+        raylib::SetWindowSize(resolution.width, resolution.height);
+      });
 
   SystemManager systems;
 
