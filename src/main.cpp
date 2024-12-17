@@ -342,10 +342,13 @@ struct HasSliderState : BaseComponent {
   HasSliderState(float val) : value(val) {}
 };
 
-struct HasChildComponent : BaseComponent {
-  EntityID child;
-  HasChildComponent(EntityID id) : child(id) {}
+struct HasChildrenComponent : BaseComponent {
+  std::vector<EntityID> children;
+  HasChildrenComponent() {}
+  void add_child(EntityID child) { children.push_back(child); }
 };
+
+struct ShouldHide : BaseComponent {};
 
 // TODO i like this but for Tags, i wish
 // the user of this didnt have to add UIComponent to their for_each_with
@@ -415,6 +418,9 @@ struct HandleTabbing : SystemWithUIContext<> {
   virtual void for_each_with(Entity &entity, UIComponent &, float) override {
     if (!context_entity)
       return;
+    if (entity.has<ShouldHide>())
+      return;
+
     UIContext &context = context_entity->get<UIContext>();
     context.try_to_grab(entity.id);
     context.process_tabbing(entity.id);
@@ -429,6 +435,8 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
     if (!context_entity)
       return;
     UIContext &context = context_entity->get<UIContext>();
+    if (entity.has<ShouldHide>())
+      return;
 
     raylib::Color col = hasColor.color;
     if (context.is_hot(entity.id)) {
@@ -441,7 +449,7 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
     raylib::DrawRectangleV(transform.position, transform.size, col);
     if (entity.has<HasLabel>()) {
       DrawText(entity.get<HasLabel>().label.c_str(), transform.position.x,
-               transform.position.y, transform.size.y, raylib::RAYWHITE);
+               transform.position.y, transform.size.y / 2.f, raylib::RAYWHITE);
     }
   }
 };
@@ -477,6 +485,7 @@ void make_checkbox(vec2 position) {
 }
 
 void make_slider(vec2 position) {
+  // TODO add vertical slider
 
   auto &background = EntityHelper::createEntity();
   background.addComponent<ui::UIComponent>();
@@ -508,7 +517,8 @@ void make_slider(vec2 position) {
     float position_offset = value * rect.width * 0.75f;
 
     auto opt_child =
-        EQ().whereID(entity.get<ui::HasChildComponent>().child).gen_first();
+        EQ().whereID(entity.get<ui::HasChildrenComponent>().children[0])
+            .gen_first();
 
     Transform &child_transform = opt_child->get<Transform>();
     child_transform.position = {rect.x + position_offset, rect.y};
@@ -523,7 +533,56 @@ void make_slider(vec2 position) {
       position, vec2{button_size.x * 0.25f, button_size.y});
   handle.addComponent<ui::HasColor>(raylib::BLUE);
 
-  background.addComponent<ui::HasChildComponent>(handle.id);
+  background.addComponent<ui::HasChildrenComponent>();
+  background.get<ui::HasChildrenComponent>().add_child(handle.id);
+}
+
+void make_dropdown(vec2 position, std::vector<std::string> options) {
+  auto &dropdown = EntityHelper::createEntity();
+  dropdown.addComponent<ui::UIComponent>();
+  dropdown.addComponent<ui::Transform>(position, button_size);
+  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
+  dropdown.addComponent<ui::HasCheckboxState>(false);
+  dropdown.addComponent<ui::HasLabel>(options[0]);
+
+  dropdown.addComponent<ui::HasChildrenComponent>();
+  float yoff = 1;
+  for (auto &option : options) {
+    auto &child = EntityHelper::createEntity();
+    child.addComponent<ui::UIComponent>();
+    child.addComponent<ui::Transform>(
+        position + vec2{0, button_size.y * (yoff++)}, button_size);
+    child.addComponent<ui::HasColor>(raylib::PURPLE);
+    child.addComponent<ui::HasLabel>(option);
+    child.addComponent<ui::ShouldHide>();
+    child.addComponent<ui::HasClickListener>([&](Entity &entity) {
+      std::cout << "clicked on " << option << std::endl;
+      dropdown.get<ui::HasLabel>().label = entity.get<HasLabel>().label;
+      dropdown.get<ui::HasClickListener>().cb(dropdown);
+
+      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
+      opt_context->get<ui::UIContext>().set_focus(dropdown.id);
+    });
+
+    dropdown.get<HasChildrenComponent>().add_child(child.id);
+  }
+
+  //
+  dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
+    entity.get<ui::HasCheckboxState>().on =
+        !entity.get<ui::HasCheckboxState>().on;
+    std::cout << "dropdown " << entity.get<ui::HasCheckboxState>().on
+              << std::endl;
+
+    for (auto id : entity.get<HasChildrenComponent>().children) {
+      auto opt_child = EQ().whereID(id).gen_first();
+      if (entity.get<ui::HasCheckboxState>().on) {
+        opt_child->removeComponent<ShouldHide>();
+      } else {
+        opt_child->addComponent<ShouldHide>();
+      }
+    }
+  });
 }
 
 } // namespace ui
@@ -547,11 +606,14 @@ int main(void) {
 
   float y = 200;
   int o = 0;
-  int s = 100;
+  int s = 75;
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_checkbox(vec2{200, y + (o++ * s)});
   ui::make_slider(vec2{200, y + (o++ * s)});
+  ui::make_dropdown(
+      vec2{200, y + (o++ * s)},
+      std::vector<std::string>{{"default", "option1", "option2"}});
 
   SystemManager systems;
 
