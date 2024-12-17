@@ -94,7 +94,7 @@ struct RenderAvailableResolutions
   }
 };
 
-namespace UI {
+namespace ui {
 inline bool is_mouse_inside(const input::MousePosition &mouse_pos,
                             const raylib::Rectangle &rect) {
   return mouse_pos.x >= rect.x && mouse_pos.x <= rect.x + rect.width &&
@@ -206,12 +206,15 @@ struct HasColor : BaseComponent {
 
 struct HasClickListener : BaseComponent {
   bool down = false;
-  std::function<void(void)> cb;
-  HasClickListener(const std::function<void(void)> &callback) : cb(callback) {}
+  std::function<void(Entity &)> cb;
+  HasClickListener(const std::function<void(Entity &)> &callback)
+      : cb(callback) {}
 };
 
+// TODO i like this but for Tags, i wish
+// the user of this didnt have to add UIComponent to their for_each_with
 template <typename... Components>
-struct SystemWithUIContext : System<Components...> {
+struct SystemWithUIContext : System<UIComponent, Components...> {
   Entity *context_entity;
   virtual void once(float) override {
     OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
@@ -222,7 +225,8 @@ struct SystemWithUIContext : System<Components...> {
 struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
   virtual ~HandleClicks() {}
 
-  virtual void for_each_with(Entity &entity, Transform &transform,
+  virtual void for_each_with(Entity &entity, UIComponent &,
+                             Transform &transform,
                              HasClickListener &hasClickListener,
                              float) override {
     if (!context_entity)
@@ -236,13 +240,33 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
 
     if (context.is_mouse_click(entity.id)) {
       context.set_focus(entity.id);
-      hasClickListener.cb();
+      hasClickListener.cb(entity);
     }
   }
 };
 
-struct RenderUI : SystemWithUIContext<UIComponent, Transform, HasColor> {
-  virtual ~RenderUI() {}
+struct HandleTabbing : SystemWithUIContext<Transform> {
+  virtual ~HandleTabbing() {}
+
+  virtual void for_each_with(Entity &entity, UIComponent &,
+                             Transform &transform, float) override {
+    if (!context_entity)
+      return;
+    UIContext &context = context_entity->get<UIContext>();
+
+    context.active_if_mouse_inside(entity.id, transform.rect());
+    context.try_to_grab(entity.id);
+    // draw focus ring
+    // handle tabbing
+
+    if (context.is_mouse_click(entity.id)) {
+      context.set_focus(entity.id);
+    }
+  }
+};
+
+struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
+  virtual ~RenderUIComponents() {}
   virtual void for_each_with(const Entity &entity, const UIComponent &,
                              const Transform &transform,
                              const HasColor &hasColor, float) const override {
@@ -262,7 +286,17 @@ struct RenderUI : SystemWithUIContext<UIComponent, Transform, HasColor> {
   }
 };
 
-} // namespace UI
+void make_button(vec2 position) {
+  auto &entity = EntityHelper::createEntity();
+  entity.addComponent<ui::UIComponent>();
+  entity.addComponent<ui::Transform>(position, vec2{50, 25});
+  entity.addComponent<ui::HasColor>(raylib::BLUE);
+  entity.addComponent<ui::HasClickListener>([](Entity &entity) {
+    std::cout << "I clicked the button " << entity.id << std::endl;
+  });
+}
+
+} // namespace ui
 
 int main(void) {
   const int screenWidth = 720;
@@ -277,33 +311,26 @@ int main(void) {
     window_manager::add_singleton_components(
         entity, window_manager::Resolution{screenWidth, screenHeight}, 200,
         get_resolutions());
-    entity.addComponent<UI::UIContext>();
+    entity.addComponent<ui::UIContext>();
   }
 
-  // make_button
-  {
-    auto &entity = EntityHelper::createEntity();
-    entity.addComponent<UI::UIComponent>();
-    entity.addComponent<UI::Transform>(vec2{100, 200}, vec2{50, 25});
-    entity.addComponent<UI::HasColor>(raylib::BLUE);
-    entity.addComponent<UI::HasClickListener>(
-        []() { std::cout << "I clicked the button" << std::endl; });
-  }
+  ui::make_button(vec2{200, 200});
+  ui::make_button(vec2{200, 250});
 
   SystemManager systems;
 
   // debug systems
   { window_manager::enforce_singletons(systems); }
 
-  systems.register_update_system(std::make_unique<UI::BeginUIContextManager>());
-  systems.register_update_system(std::make_unique<UI::HandleClicks>());
-  systems.register_update_system(std::make_unique<UI::EndUIContextManager>());
+  systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
+  systems.register_update_system(std::make_unique<ui::HandleClicks>());
+  systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
   // renders
   {
     systems.register_render_system(
         [&]() { raylib::ClearBackground(raylib::DARKGRAY); });
-    systems.register_render_system(std::make_unique<UI::RenderUI>());
+    systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
     systems.register_render_system(
         std::make_unique<RenderAvailableResolutions>());
     systems.register_render_system(std::make_unique<RenderFPS>());
