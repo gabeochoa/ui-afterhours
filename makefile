@@ -22,7 +22,7 @@ DEPENDS := $(patsubst %.cpp,%.d,$(SOURCES))
 -include $(DEPENDS)
 
 
-OUTPUT_EXE := wm.exe
+OUTPUT_EXE := ui.exe
 
 CXX := clang++
 

@@ -89,40 +89,68 @@ struct RenderAvailableResolutions
   }
 };
 
-struct CycleBetweenResolutions
-    : System<window_manager::ProvidesCurrentResolution,
-             window_manager::ProvidesAvailableWindowResolutions> {
-  const float cycle_reset = 1.f;
-  float timer;
-  float timerReset;
-  size_t res_index = 0;
+namespace UI {
 
-  CycleBetweenResolutions() : timer(cycle_reset), timerReset(cycle_reset) {}
-  virtual ~CycleBetweenResolutions() {}
+struct UIComponent : BaseComponent {};
 
-  virtual bool should_run(float dt) override {
-    if (timer < 0) {
-      timer = timerReset;
-      return true;
-    }
-    timer -= dt;
-    return false;
-  }
-
-  virtual void for_each_with(
-      Entity &, window_manager::ProvidesCurrentResolution &pCurrentResolution,
-      window_manager::ProvidesAvailableWindowResolutions &pAvailableResolutions,
-      float) override {
-    res_index =
-        (res_index + 1) % pAvailableResolutions.available_resolutions.size();
-    const auto &resolution =
-        pAvailableResolutions.available_resolutions[res_index];
-    raylib::SetWindowSize(resolution.width, resolution.height);
-    pCurrentResolution.current_resolution = resolution;
-
-    std::cout << resolution.width << "x" << resolution.height << std::endl;
+struct Transform : BaseComponent {
+  vec2 position;
+  vec2 size;
+  Transform(vec2 pos, vec2 sz) : position(pos), size(sz) {}
+  raylib::Rectangle rect() const {
+    return raylib::Rectangle{position.x, position.y, size.x, size.y};
   }
 };
+
+struct HasColor : BaseComponent {
+  raylib::Color color;
+  HasColor(raylib::Color c) : color(c) {}
+};
+
+struct HasClickListener : BaseComponent {
+  bool down = false;
+  std::function<void(void)> cb;
+  HasClickListener(const std::function<void(void)> &callback) : cb(callback) {}
+};
+
+inline bool is_mouse_inside(const input::MousePosition &mouse_pos,
+                            const raylib::Rectangle &rect) {
+  return mouse_pos.x >= rect.x && mouse_pos.x <= rect.x + rect.width &&
+         mouse_pos.y >= rect.y && mouse_pos.y <= rect.y + rect.height;
+}
+
+struct HandleClicks : System<Transform, HasClickListener> {
+  virtual ~HandleClicks() {}
+  virtual void for_each_with(Entity &, Transform &transform,
+                             HasClickListener &hasClickListener,
+                             float) override {
+
+    bool is_inside =
+        is_mouse_inside(input::get_mouse_position(), transform.rect());
+    bool down = input::is_mouse_button_down(0);
+
+    if (is_inside && down && !hasClickListener.down) {
+      hasClickListener.cb();
+      hasClickListener.down = true;
+    }
+
+    if (!down) {
+      hasClickListener.down = false;
+    }
+  }
+};
+
+struct RenderUI : System<Transform> {
+  virtual ~RenderUI() {}
+  virtual void for_each_with(const Entity &entity, const Transform &transform,
+                             float) const override {
+    raylib::Color col =
+        entity.has<HasColor>() ? entity.get<HasColor>().color : raylib::BLACK;
+    raylib::DrawRectangleV(transform.position, transform.size, col);
+  }
+};
+
+} // namespace UI
 
 int main(void) {
   const int screenWidth = 720;
@@ -139,17 +167,28 @@ int main(void) {
         get_resolutions());
   }
 
+  // make_button
+  {
+    auto &entity = EntityHelper::createEntity();
+    entity.addComponent<UI::UIComponent>();
+    entity.addComponent<UI::Transform>(vec2{100, 200}, vec2{50, 25});
+    entity.addComponent<UI::HasColor>(raylib::BLUE);
+    entity.addComponent<UI::HasClickListener>(
+        []() { std::cout << "I clicked the button" << std::endl; });
+  }
+
   SystemManager systems;
 
   // debug systems
   { window_manager::enforce_singletons(systems); }
 
-  systems.register_update_system(std::make_unique<CycleBetweenResolutions>());
+  systems.register_update_system(std::make_unique<UI::HandleClicks>());
 
   // renders
   {
     systems.register_render_system(
         [&]() { raylib::ClearBackground(raylib::DARKGRAY); });
+    systems.register_render_system(std::make_unique<UI::RenderUI>());
     systems.register_render_system(
         std::make_unique<RenderAvailableResolutions>());
     systems.register_render_system(std::make_unique<RenderFPS>());
