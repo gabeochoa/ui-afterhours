@@ -434,9 +434,9 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
                              const HasColor &hasColor, float) const override {
     if (!context_entity)
       return;
-    UIContext &context = context_entity->get<UIContext>();
     if (entity.has<ShouldHide>())
       return;
+    UIContext &context = context_entity->get<UIContext>();
 
     raylib::Color col = hasColor.color;
     if (context.is_hot(entity.id)) {
