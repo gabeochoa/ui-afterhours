@@ -319,6 +319,13 @@ struct HasClickListener : BaseComponent {
       : cb(callback) {}
 };
 
+struct HasDragListener : BaseComponent {
+  bool down = false;
+  std::function<void(Entity &)> cb;
+  HasDragListener(const std::function<void(Entity &)> &callback)
+      : cb(callback) {}
+};
+
 struct HasLabel : BaseComponent {
   std::string label;
   HasLabel(const std::string &str) : label(str) {}
@@ -327,6 +334,17 @@ struct HasLabel : BaseComponent {
 struct HasCheckboxState : BaseComponent {
   bool on;
   HasCheckboxState(bool b) : on(b) {}
+};
+
+struct HasSliderState : BaseComponent {
+  bool changed_since = false;
+  float value;
+  HasSliderState(float val) : value(val) {}
+};
+
+struct HasChildComponent : BaseComponent {
+  EntityID child;
+  HasChildComponent(EntityID id) : child(id) {}
 };
 
 // TODO i like this but for Tags, i wish
@@ -362,6 +380,31 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
     if (context.is_mouse_click(entity.id)) {
       context.set_focus(entity.id);
       hasClickListener.cb(entity);
+    }
+  }
+};
+
+struct HandleDrags : SystemWithUIContext<Transform, HasDragListener> {
+  virtual ~HandleDrags() {}
+
+  virtual void for_each_with(Entity &entity, UIComponent &,
+                             Transform &transform,
+                             HasDragListener &hasDragListener, float) override {
+    if (!context_entity)
+      return;
+    UIContext &context = context_entity->get<UIContext>();
+
+    context.active_if_mouse_inside(entity.id, transform.rect());
+
+    if (context.has_focus(entity.id) &&
+        context.pressed(InputAction::WidgetPress)) {
+      context.set_focus(entity.id);
+      hasDragListener.cb(entity);
+    }
+
+    if (context.is_active(entity.id)) {
+      context.set_focus(entity.id);
+      hasDragListener.cb(entity);
     }
   }
 };
@@ -403,10 +446,12 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
   }
 };
 
+const vec2 button_size = vec2{100, 50};
+
 void make_button(vec2 position) {
   auto &entity = EntityHelper::createEntity();
   entity.addComponent<ui::UIComponent>();
-  entity.addComponent<ui::Transform>(position, vec2{50, 25});
+  entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
   entity.addComponent<ui::HasClickListener>([](Entity &entity) {
@@ -417,7 +462,7 @@ void make_button(vec2 position) {
 void make_checkbox(vec2 position) {
   auto &entity = EntityHelper::createEntity();
   entity.addComponent<ui::UIComponent>();
-  entity.addComponent<ui::Transform>(position, vec2{50, 25});
+  entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasCheckboxState>(false);
   entity.addComponent<ui::HasLabel>(
@@ -429,6 +474,56 @@ void make_checkbox(vec2 position) {
     entity.get<ui ::HasLabel>().label =
         raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " ");
   });
+}
+
+void make_slider(vec2 position) {
+
+  auto &background = EntityHelper::createEntity();
+  background.addComponent<ui::UIComponent>();
+  background.addComponent<ui::Transform>(position,
+                                         vec2{button_size.x, button_size.y});
+  background.addComponent<ui::HasSliderState>(0.5f);
+  background.addComponent<ui::HasColor>(raylib::GREEN);
+
+  background.addComponent<ui::HasDragListener>([](Entity &entity) {
+    float mnf = 0.f;
+    float mxf = 1.f;
+
+    Transform &transform = entity.get<Transform>();
+    raylib::Rectangle rect = transform.rect();
+    HasSliderState &sliderState = entity.get<ui::HasSliderState>();
+    float &value = sliderState.value;
+
+    auto mouse_position = input::get_mouse_position();
+    float v = (mouse_position.x - rect.x) / rect.width;
+    if (v < mnf)
+      v = mnf;
+    if (v > mxf)
+      v = mxf;
+    if (v != value) {
+      value = v;
+      sliderState.changed_since = true;
+    }
+
+    float position_offset = value * rect.width * 0.75f;
+
+    auto opt_child =
+        EQ().whereID(entity.get<ui::HasChildComponent>().child).gen_first();
+
+    Transform &child_transform = opt_child->get<Transform>();
+    child_transform.position = {rect.x + position_offset, rect.y};
+
+    std::cout << "I clicked the slider" << entity.id << " " << value
+              << std::endl;
+  });
+
+  auto &handle = EntityHelper::createEntity();
+  handle.addComponent<ui::UIComponent>();
+  handle.addComponent<ui::Transform>(
+      position, vec2{button_size.x * 0.25f, button_size.y});
+  handle.addComponent<ui::HasColor>(raylib::BLUE);
+
+  background.addComponent<ui::HasChildComponent>(handle.id);
 }
 
 } // namespace ui
@@ -450,9 +545,13 @@ int main(void) {
     entity.addComponent<ui::UIContext>();
   }
 
-  ui::make_button(vec2{200, 200});
-  ui::make_button(vec2{200, 250});
-  ui::make_checkbox(vec2{200, 300});
+  float y = 200;
+  int o = 0;
+  int s = 100;
+  ui::make_button(vec2{200, y + (o++ * s)});
+  ui::make_button(vec2{200, y + (o++ * s)});
+  ui::make_checkbox(vec2{200, y + (o++ * s)});
+  ui::make_slider(vec2{200, y + (o++ * s)});
 
   SystemManager systems;
 
@@ -468,6 +567,7 @@ int main(void) {
   systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
   systems.register_update_system(std::make_unique<ui::HandleTabbing>());
   systems.register_update_system(std::make_unique<ui::HandleClicks>());
+  systems.register_update_system(std::make_unique<ui::HandleDrags>());
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
   // renders
