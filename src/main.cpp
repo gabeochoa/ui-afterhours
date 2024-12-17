@@ -319,6 +319,11 @@ struct HasClickListener : BaseComponent {
       : cb(callback) {}
 };
 
+struct HasLabel : BaseComponent {
+  std::string label;
+  HasLabel(const std::string &str) : label(str) {}
+};
+
 // TODO i like this but for Tags, i wish
 // the user of this didnt have to add UIComponent to their for_each_with
 template <typename... Components>
@@ -386,6 +391,10 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
       raylib::DrawRectangleRec(transform.focus_rect(), raylib::PINK);
     }
     raylib::DrawRectangleV(transform.position, transform.size, col);
+    if (entity.has<HasLabel>()) {
+      DrawText(entity.get<HasLabel>().label.c_str(), transform.position.x,
+               transform.position.y, transform.size.y, raylib::RAYWHITE);
+    }
   }
 };
 
@@ -394,6 +403,7 @@ void make_button(vec2 position) {
   entity.addComponent<ui::UIComponent>();
   entity.addComponent<ui::Transform>(position, vec2{50, 25});
   entity.addComponent<ui::HasColor>(raylib::BLUE);
+  entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
   entity.addComponent<ui::HasClickListener>([](Entity &entity) {
     std::cout << "I clicked the button " << entity.id << std::endl;
   });
