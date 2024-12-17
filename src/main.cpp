@@ -69,31 +69,6 @@ std::vector<window_manager::Resolution> get_resolutions() {
   return resolutions;
 }
 
-struct RenderAvailableResolutions
-    : System<window_manager::ProvidesCurrentResolution,
-             window_manager::ProvidesAvailableWindowResolutions> {
-  virtual ~RenderAvailableResolutions() {}
-  virtual void for_each_with(
-      const Entity &,
-      const window_manager::ProvidesCurrentResolution &pCurrentResolution,
-      const window_manager::ProvidesAvailableWindowResolutions
-          &pAvailableResolutions,
-      float) const override {
-
-    for (size_t i = 0; i < pAvailableResolutions.available_resolutions.size();
-         i++) {
-      const window_manager::Resolution &rez =
-          pAvailableResolutions.available_resolutions[i];
-
-      bool is_selected = rez == pCurrentResolution.current_resolution;
-
-      DrawText(raylib::TextFormat("%i x %i %s", rez.width, rez.height,
-                                  (is_selected ? " <-------- :) " : "")),
-               30, 20 + (int)(15 * i), 10, raylib::RAYWHITE);
-    }
-  }
-};
-
 enum class InputAction {
   None,
   WidgetNext,
@@ -336,6 +311,20 @@ struct HasCheckboxState : BaseComponent {
   HasCheckboxState(bool b) : on(b) {}
 };
 
+struct HasDropdownState : HasCheckboxState {
+  using Options = std::vector<std::string>;
+  Options options;
+  std::function<Options(void)> fetch_options;
+
+  HasDropdownState(const Options &opts,
+                   const std::function<Options(void)> fetch_opts = nullptr)
+      : HasCheckboxState(false), options(opts), fetch_options(fetch_opts) {}
+
+  HasDropdownState(const std::function<Options(void)> fetch_opts)
+      : HasCheckboxState(false), options(fetch_opts()),
+        fetch_options(fetch_opts) {}
+};
+
 struct HasSliderState : BaseComponent {
   bool changed_since = false;
   float value;
@@ -369,6 +358,8 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
                              HasClickListener &hasClickListener,
                              float) override {
     if (!context_entity)
+      return;
+    if (entity.has<ShouldHide>())
       return;
     UIContext &context = context_entity->get<UIContext>();
 
@@ -451,6 +442,18 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
       DrawText(entity.get<HasLabel>().label.c_str(), transform.position.x,
                transform.position.y, transform.size.y / 2.f, raylib::RAYWHITE);
     }
+  }
+};
+
+struct UpdateDropdownOptions : SystemWithUIContext<HasDropdownState> {
+  virtual void for_each_with(Entity &entity, UIComponent &,
+                             HasDropdownState &hasDropdownState,
+                             float) override {
+
+    // Isnt dynamic
+    if (!hasDropdownState.fetch_options)
+      return;
+    hasDropdownState.options = hasDropdownState.fetch_options();
   }
 };
 
@@ -537,12 +540,17 @@ void make_slider(vec2 position) {
   background.get<ui::HasChildrenComponent>().add_child(handle.id);
 }
 
-void make_dropdown(vec2 position, std::vector<std::string> options) {
+void make_dropdown(
+    vec2 position,
+    const std::function<ui::HasDropdownState::Options(void)> &fn) {
   auto &dropdown = EntityHelper::createEntity();
   dropdown.addComponent<ui::UIComponent>();
   dropdown.addComponent<ui::Transform>(position, button_size);
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
-  dropdown.addComponent<ui::HasCheckboxState>(false);
+  dropdown.addComponent<ui::HasDropdownState>(fn);
+
+  auto options = fn();
+
   dropdown.addComponent<ui::HasLabel>(options[0]);
 
   dropdown.addComponent<ui::HasChildrenComponent>();
@@ -569,14 +577,14 @@ void make_dropdown(vec2 position, std::vector<std::string> options) {
 
   //
   dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
-    entity.get<ui::HasCheckboxState>().on =
-        !entity.get<ui::HasCheckboxState>().on;
-    std::cout << "dropdown " << entity.get<ui::HasCheckboxState>().on
+    entity.get<ui::HasDropdownState>().on =
+        !entity.get<ui::HasDropdownState>().on;
+    std::cout << "dropdown " << entity.get<ui::HasDropdownState>().on
               << std::endl;
 
     for (auto id : entity.get<HasChildrenComponent>().children) {
       auto opt_child = EQ().whereID(id).gen_first();
-      if (entity.get<ui::HasCheckboxState>().on) {
+      if (entity.get<ui::HasDropdownState>().on) {
         opt_child->removeComponent<ShouldHide>();
       } else {
         opt_child->addComponent<ShouldHide>();
@@ -611,9 +619,17 @@ int main(void) {
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_checkbox(vec2{200, y + (o++ * s)});
   ui::make_slider(vec2{200, y + (o++ * s)});
-  ui::make_dropdown(
-      vec2{200, y + (o++ * s)},
-      std::vector<std::string>{{"default", "option1", "option2"}});
+  ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
+    return std::vector<std::string>{{"default", "option1", "option2"}};
+  });
+  ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
+    std::vector<std::string> resolutions;
+    for (auto &rez : get_resolutions()) {
+      std::string fmt = raylib::TextFormat("%i x %i", rez.width, rez.height);
+      resolutions.push_back(fmt);
+    }
+    return resolutions;
+  });
 
   SystemManager systems;
 
@@ -630,6 +646,7 @@ int main(void) {
   systems.register_update_system(std::make_unique<ui::HandleTabbing>());
   systems.register_update_system(std::make_unique<ui::HandleClicks>());
   systems.register_update_system(std::make_unique<ui::HandleDrags>());
+  systems.register_update_system(std::make_unique<ui::UpdateDropdownOptions>());
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
   // renders
@@ -637,8 +654,6 @@ int main(void) {
     systems.register_render_system(
         [&]() { raylib::ClearBackground(raylib::DARKGRAY); });
     systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
-    systems.register_render_system(
-        std::make_unique<RenderAvailableResolutions>());
     systems.register_render_system(std::make_unique<RenderFPS>());
   }
 
