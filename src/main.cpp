@@ -454,6 +454,34 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
 
 struct UpdateDropdownOptions
     : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
+
+  void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
+                           const std::vector<std::string> &options,
+                           const std::string &option) {
+    auto &child = EntityHelper::createEntity();
+    entity.get<HasChildrenComponent>().add_child(child.id);
+    child.addComponent<ui::UIComponent>();
+    child.addComponent<ui::Transform>(
+        transform.position + vec2{0, button_size.y * (i + 1)}, button_size);
+    child.addComponent<ui::HasColor>(raylib::PURPLE);
+    child.addComponent<ui::HasLabel>(option);
+    child.addComponent<ui::ShouldHide>();
+
+    child.addComponent<ui::HasClickListener>([i, &entity, &options](Entity &) {
+      std::cout << " i " << i << "\n";
+      ui::HasDropdownState &hds = entity.get<ui::HasDropdownState>();
+      if (hds.on_option_changed)
+        hds.on_option_changed(i);
+      entity.get<ui::HasDropdownState>().last_option_clicked = i;
+      entity.get<ui::HasClickListener>().cb(entity);
+
+      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
+      opt_context->get<ui::UIContext>().set_focus(entity.id);
+
+      entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
+    });
+  }
+
   virtual void for_each_with(Entity &entity, UIComponent &,
                              Transform &transform,
                              HasDropdownState &hasDropdownState,
@@ -493,29 +521,7 @@ struct UpdateDropdownOptions
 
     for (size_t i = 0; i < options.size(); i++) {
       auto &option = options[i];
-      auto &child = EntityHelper::createEntity();
-      entity.get<HasChildrenComponent>().add_child(child.id);
-      child.addComponent<ui::UIComponent>();
-      child.addComponent<ui::Transform>(
-          transform.position + vec2{0, button_size.y * (i + 1)}, button_size);
-      child.addComponent<ui::HasColor>(raylib::PURPLE);
-      child.addComponent<ui::HasLabel>(option);
-      child.addComponent<ui::ShouldHide>();
-
-      child.addComponent<ui::HasClickListener>([i, &entity,
-                                                &options](Entity &) {
-        std::cout << " i " << i << "\n";
-        ui::HasDropdownState &hds = entity.get<ui::HasDropdownState>();
-        if (hds.on_option_changed)
-          hds.on_option_changed(i);
-        entity.get<ui::HasDropdownState>().last_option_clicked = i;
-        entity.get<ui::HasClickListener>().cb(entity);
-
-        OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
-        opt_context->get<ui::UIContext>().set_focus(entity.id);
-
-        entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
-      });
+      make_dropdown_child(transform, entity, i, options, option);
     }
 
     hasDropdownState.last_option_clicked =
@@ -642,7 +648,7 @@ void make_dropdown(vec2 position,
 } // namespace ui
 
 int main(void) {
-  const int screenWidth = 720;
+  const int screenWidth = 1280;
   const int screenHeight = 720;
 
   raylib::InitWindow(screenWidth, screenHeight, "wm-afterhours");
