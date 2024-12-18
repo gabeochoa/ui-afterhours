@@ -683,6 +683,12 @@ int main(void) {
         std::cout << "click" << index << "\n";
         auto resolution = get_resolutions()[index];
         raylib::SetWindowSize(resolution.width, resolution.height);
+
+        auto opt_pcr =
+            EQ().whereHasComponent<window_manager::ProvidesCurrentResolution>()
+                .gen_first();
+        opt_pcr->get<window_manager::ProvidesCurrentResolution>()
+            .current_resolution = resolution;
       });
 
   SystemManager systems;
