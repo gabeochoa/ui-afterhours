@@ -56,25 +56,6 @@ struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
   }
 };
 
-std::vector<window_manager::Resolution> get_resolutions() {
-  int count = 0;
-  const GLFWvidmode *modes = glfwGetVideoModes(glfwGetPrimaryMonitor(), &count);
-  std::vector<window_manager::Resolution> resolutions;
-
-  for (int i = 0; i < count; i++) {
-    resolutions.push_back(
-        window_manager::Resolution{modes[i].width, modes[i].height});
-  }
-  // Sort the vector
-  std::sort(resolutions.begin(), resolutions.end());
-
-  // Remove duplicates
-  resolutions.erase(std::unique(resolutions.begin(), resolutions.end()),
-                    resolutions.end());
-
-  return resolutions;
-}
-
 const vec2 button_size = vec2{100, 50};
 
 enum class InputAction {
@@ -338,6 +319,74 @@ struct HasDropdownState : HasCheckboxState {
       : HasDropdownState(fetch_opts(), fetch_opts, nullptr) {}
 };
 
+// TODO i really wanted to statically validate this
+// so that any developer would get a reasonable compiler msg
+// but i couldnt get it working with both trivial types and struct types
+// https://godbolt.org/z/7v4n7s1Kn
+/*
+template <typename T, typename = void>
+struct is_vector_data_convertible_to_string : std::false_type {};
+template <typename T>
+using stringable = std::is_convertible<T, std::string>;
+
+template <typename T>
+struct is_vector_data_convertible_to_string;
+
+template <typename T>
+struct is_vector_data_convertible_to_string<std::vector<T>> : stringable<T> {};
+
+template <typename T>
+struct is_vector_data_convertible_to_string<
+    T, std::void_t<decltype(std::to_string(
+           std::declval<typename T::value_type>()))>> : std::true_type {};
+*/
+
+template <typename T> struct has_fetch_data_member {
+  template <typename U>
+  static auto test(U *)
+      -> decltype(std::declval<U>().fetch_data(), void(), std::true_type{});
+
+  template <typename U> static auto test(...) -> std::false_type;
+
+  static constexpr bool value = decltype(test<T>(0))::value;
+};
+
+template <typename ProviderComponent>
+struct HasDropdownStateWithProvider : HasDropdownState {
+
+  static Options get_data_from_provider() {
+    // log_info("getting data from provider");
+    static_assert(std::is_base_of_v<BaseComponent, ProviderComponent>,
+                  "ProviderComponent must be a child of BaseComponent");
+    // Convert the data in the provider component to a list of options
+    auto opt_component =
+        EQ().whereHasComponent<ProviderComponent>().gen_first();
+    if (!opt_component.valid())
+      return {{}};
+    ProviderComponent &pComp = opt_component->template get<ProviderComponent>();
+
+    static_assert(has_fetch_data_member<ProviderComponent>::value,
+                  "ProviderComponent must have fetch_data function");
+
+    auto fetch_data_result = pComp.fetch_data();
+
+    // TODO see message above
+    // static_assert(is_vector_data_convertible_to_string<
+    // decltype(fetch_data_result)>::value,
+    // "ProviderComponent::fetch_data must return a vector of items "
+    // "convertible to string");
+
+    Options new_options;
+    for (auto &data : fetch_data_result) {
+      new_options.push_back((std::string)data);
+    }
+    return new_options;
+  }
+
+  HasDropdownStateWithProvider()
+      : HasDropdownState({{}}, get_data_from_provider, nullptr) {}
+};
+
 struct HasSliderState : BaseComponent {
   bool changed_since = false;
   float value;
@@ -459,6 +508,93 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
   }
 };
 
+template <typename ProviderComponent>
+struct UpdateDropdownOptionsForProvider
+    : SystemWithUIContext<Transform,
+                          HasDropdownStateWithProvider<ProviderComponent>,
+                          HasChildrenComponent> {
+
+  void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
+                           const std::string &option) {
+    auto &child = EntityHelper::createEntity();
+    entity.get<HasChildrenComponent>().add_child(child.id);
+    child.addComponent<ui::UIComponent>();
+    child.addComponent<ui::Transform>(
+        transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
+        button_size);
+    child.addComponent<ui::HasColor>(raylib::PURPLE);
+    child.addComponent<ui::HasLabel>(option);
+    child.addComponent<ui::ShouldHide>();
+
+    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
+      std::cout << " i " << i << "\n";
+      ui::HasDropdownState &hds =
+          entity.get<HasDropdownStateWithProvider<ProviderComponent>>();
+      if (hds.on_option_changed)
+        hds.on_option_changed(i);
+      entity.get<HasDropdownStateWithProvider<ProviderComponent>>()
+          .last_option_clicked = i;
+      entity.get<ui::HasClickListener>().cb(entity);
+
+      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
+      opt_context->get<ui::UIContext>().set_focus(entity.id);
+
+      entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
+    });
+  }
+
+  virtual void for_each_with(
+      Entity &entity, UIComponent &, Transform &transform,
+      HasDropdownStateWithProvider<ProviderComponent> &hasDropdownState,
+      HasChildrenComponent &hasChildren, float) override {
+
+    // TODO maybe we should fetch only once a second or something?
+    const auto options = hasDropdownState.fetch_options();
+
+    if (options.size() == hasDropdownState.options.size()) {
+      bool any_changed = false;
+      for (size_t i = 0; i < options.size(); i++) {
+        auto option = options[i];
+        auto old_option = hasDropdownState.options[i];
+        if (option != old_option) {
+          any_changed = true;
+          break;
+        }
+      }
+
+      // no need to regenerate UI
+      if (!any_changed)
+        return;
+    }
+    std::cout << " up" << options.size() << " "
+              << hasDropdownState.options.size() << std::endl;
+
+    // update the children
+
+    // delete existing
+    {
+      for (auto &child_id : hasChildren.children) {
+        EntityHelper::markIDForCleanup(child_id);
+      }
+      hasChildren.children.clear();
+    }
+
+    for (size_t i = 0; i < options.size(); i++) {
+      auto &option = options[i];
+      make_dropdown_child(transform, entity, i, option);
+    }
+
+    hasDropdownState.last_option_clicked =
+        (size_t)std::max(std::min((int)options.size() - 1,
+                                  (int)hasDropdownState.last_option_clicked),
+                         0);
+    entity.get<HasLabel>().label =
+        options[hasDropdownState.last_option_clicked];
+
+    hasDropdownState.options = options;
+  }
+};
+
 struct UpdateDropdownOptions
     : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
 
@@ -475,7 +611,7 @@ struct UpdateDropdownOptions
     child.addComponent<ui::HasLabel>(option);
     child.addComponent<ui::ShouldHide>();
 
-    child.addComponent<ui::HasClickListener>([i, &entity, &options](Entity &) {
+    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
       std::cout << " i " << i << "\n";
       ui::HasDropdownState &hds = entity.get<ui::HasDropdownState>();
       if (hds.on_option_changed)
@@ -653,6 +789,48 @@ void make_dropdown(vec2 position,
   });
 }
 
+void make_dropdown(vec2 position) {
+  using WRDS = ui::HasDropdownStateWithProvider<
+      window_manager::ProvidesAvailableWindowResolutions>;
+
+  auto &dropdown = EntityHelper::createEntity();
+  dropdown.addComponent<ui::UIComponent>();
+  dropdown.addComponent<ui::Transform>(position, button_size);
+  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
+  dropdown.addComponent<WRDS>();
+  dropdown.addComponent<ui::HasLabel>();
+  dropdown.addComponent<ui::HasChildrenComponent>();
+  dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
+    bool nv = !entity.get<WRDS>().on;
+    std::cout << "dropdown " << nv << " " << std::endl;
+
+    for (auto id : entity.get<HasChildrenComponent>().children) {
+      auto opt_child = EQ().whereID(id).gen_first();
+      // std::cout << opt_child->id << std::endl;
+      if (nv) {
+        opt_child->removeComponent<ShouldHide>();
+      } else {
+        opt_child->addComponent<ShouldHide>();
+      }
+    }
+
+    entity.get<WRDS>().on = nv;
+
+    if (!nv) {
+      int index = entity.get<WRDS>().last_option_clicked;
+
+      auto resolution = window_manager::fetch_available_resolutions()[index];
+      raylib::SetWindowSize(resolution.width, resolution.height);
+
+      auto opt_pcr =
+          EQ().whereHasComponent<window_manager::ProvidesCurrentResolution>()
+              .gen_first();
+      opt_pcr->get<window_manager::ProvidesCurrentResolution>()
+          .current_resolution = resolution;
+    }
+  });
+}
+
 } // namespace ui
 
 int main(void) {
@@ -680,11 +858,14 @@ int main(void) {
   ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
+  ui::make_dropdown(vec2{300, y});
+
+  /*
   ui::make_dropdown(
       vec2{400, y},
       []() {
         std::vector<std::string> resolutions;
-        for (auto &rez : get_resolutions()) {
+        for (auto &rez : window_manager::fetch_available_resolutions()) {
           std::string fmt =
               raylib::TextFormat("%i x %i", rez.width, rez.height);
           resolutions.push_back(fmt);
@@ -693,7 +874,7 @@ int main(void) {
       },
       [](size_t index) {
         std::cout << "click" << index << "\n";
-        auto resolution = get_resolutions()[index];
+        auto resolution = window_manager::fetch_available_resolutions()[index];
         raylib::SetWindowSize(resolution.width, resolution.height);
 
         auto opt_pcr =
@@ -702,6 +883,7 @@ int main(void) {
         opt_pcr->get<window_manager::ProvidesCurrentResolution>()
             .current_resolution = resolution;
       });
+      */
 
   SystemManager systems;
 
@@ -722,6 +904,9 @@ int main(void) {
   systems.register_update_system(std::make_unique<ui::HandleClicks>());
   systems.register_update_system(std::make_unique<ui::HandleDrags>());
   systems.register_update_system(std::make_unique<ui::UpdateDropdownOptions>());
+  systems.register_update_system(
+      std::make_unique<ui::UpdateDropdownOptionsForProvider<
+          window_manager::ProvidesAvailableWindowResolutions>>());
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
   // renders
