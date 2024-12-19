@@ -1,9 +1,16 @@
 
 
-#include "std_include.h"
-//
+#include "backward/backward.hpp"
+
+namespace backward {
+backward::SignalHandling sh;
+} // namespace backward
 
 #include "rl.h"
+
+#include "std_include.h"
+//
+#include "log/log.h"
 //
 #define AFTER_HOURS_ENTITY_HELPER
 #define AFTER_HOURS_ENTITY_QUERY
@@ -659,9 +666,7 @@ int main(void) {
   {
     auto &entity = EntityHelper::createEntity();
     input::add_singleton_components<InputAction>(entity, get_mapping());
-    window_manager::add_singleton_components(
-        entity, window_manager::Resolution{screenWidth, screenHeight}, 200,
-        get_resolutions());
+    window_manager::add_singleton_components(entity, 200);
     entity.addComponent<ui::UIContext>();
   }
 
@@ -707,7 +712,10 @@ int main(void) {
   }
 
   // external plugins
-  { input::register_update_systems<InputAction>(systems); }
+  {
+    input::register_update_systems<InputAction>(systems);
+    window_manager::register_update_systems(systems);
+  }
 
   systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
   systems.register_update_system(std::make_unique<ui::HandleTabbing>());

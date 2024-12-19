@@ -2,9 +2,9 @@
 RAYLIB_FLAGS := `pkg-config --cflags raylib`
 RAYLIB_LIB := `pkg-config --libs raylib`
 
-RELEASE_FLAGS = -std=c++2a $(RAYLIB_FLAGS)
+RELEASE_FLAGS = -std=c++2c $(RAYLIB_FLAGS)
 
-FLAGS = -std=c++2a -Wall -Wextra -Wpedantic -Wuninitialized -Wshadow \
+FLAGS = -std=c++2c -Wall -Wextra -Wpedantic -Wuninitialized -Wshadow \
 		-Wconversion -g $(RAYLIB_FLAGS)
 
 NOFLAGS = -Wno-deprecated-volatile -Wno-missing-field-initializers \
@@ -25,8 +25,8 @@ DEPENDS := $(patsubst %.cpp,%.d,$(SOURCES))
 OUTPUT_EXE := ui.exe
 
 # CXX := /Users/gabeochoa/homebrew/Cellar/gcc/14.2.0_1/bin/g++-14
-# CXX := clang++
-CXX := g++-14
+CXX := clang++
+# CXX := g++-14
 
 .PHONY: all clean
 
