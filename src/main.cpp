@@ -321,18 +321,19 @@ struct ShouldHide : BaseComponent {};
 struct HasDropdownState : HasCheckboxState {
   using Options = std::vector<std::string>;
   Options options;
-  std::function<Options(void)> fetch_options;
+  std::function<Options(HasDropdownState &)> fetch_options;
   std::function<void(size_t)> on_option_changed;
   size_t last_option_clicked = 0;
 
-  HasDropdownState(const Options &opts,
-                   const std::function<Options(void)> fetch_opts = nullptr,
-                   const std::function<void(size_t)> opt_changed = nullptr)
+  HasDropdownState(
+      const Options &opts,
+      const std::function<Options(HasDropdownState &)> fetch_opts = nullptr,
+      const std::function<void(size_t)> opt_changed = nullptr)
       : HasCheckboxState(false), options(opts), fetch_options(fetch_opts),
         on_option_changed(opt_changed) {}
 
-  HasDropdownState(const std::function<Options(void)> fetch_opts)
-      : HasDropdownState(fetch_opts(), fetch_opts, nullptr) {}
+  HasDropdownState(const std::function<Options(HasDropdownState &)> fetch_opts)
+      : HasDropdownState(fetch_opts(*this), fetch_opts, nullptr) {}
 };
 
 // TODO i really wanted to statically validate this
@@ -357,36 +358,86 @@ struct is_vector_data_convertible_to_string<
            std::declval<typename T::value_type>()))>> : std::true_type {};
 */
 
-template <typename T> struct has_fetch_data_member {
-  template <typename U>
-  static auto test(U *)
-      -> decltype(std::declval<U>().fetch_data(), void(), std::true_type{});
+template <typename Derived, typename DataStorage, typename ProvidedType,
+          typename ProviderComponent>
+struct ProviderConsumer : public DataStorage {
 
-  template <typename U> static auto test(...) -> std::false_type;
+  struct has_fetch_data_member {
+    template <typename U>
+    static auto test(U *)
+        -> decltype(std::declval<U>().fetch_data(), void(), std::true_type{});
 
-  static constexpr bool value = decltype(test<T>(0))::value;
-};
+    template <typename U> static auto test(...) -> std::false_type;
 
-template <typename T> struct has_on_data_changed_member {
-  template <typename U>
-  static auto test(U *) -> decltype(std::declval<U>().on_data_changed(0),
-                                    void(), std::true_type{});
+    static constexpr bool value = decltype(test<ProviderComponent>(0))::value;
+  };
 
-  template <typename U> static auto test(...) -> std::false_type;
+  struct has_on_data_changed_member {
+    template <typename U>
+    static auto test(U *) -> decltype(std::declval<U>().on_data_changed(0),
+                                      void(), std::true_type{});
 
-  static constexpr bool value = decltype(test<T>(0))::value;
-};
+    template <typename U> static auto test(...) -> std::false_type;
 
-template <typename T> struct return_type {
-  using type = decltype(std::declval<T>().fetch_data());
+    static constexpr bool value = decltype(test<ProviderComponent>(0))::value;
+  };
+
+  struct return_type {
+    using type = decltype(std::declval<ProviderComponent>().fetch_data());
+  };
+
+  ProviderConsumer() : DataStorage({{}}, get_data_from_provider, nullptr) {}
+
+  virtual void write_value_change_to_provider(const DataStorage &storage) = 0;
+  virtual ProvidedType convert_from_fetch(return_type::type data) const = 0;
+
+  static ProvidedType get_data_from_provider(const DataStorage &storage) {
+    // log_info("getting data from provider");
+    static_assert(std::is_base_of_v<BaseComponent, ProviderComponent>,
+                  "ProviderComponent must be a child of BaseComponent");
+    // Convert the data in the provider component to a list of options
+    auto &provider_entity =
+        EQ().whereHasComponent<ProviderComponent>().gen_first_enforce();
+    ProviderComponent &pComp =
+        provider_entity.template get<ProviderComponent>();
+
+    static_assert(has_fetch_data_member::value,
+                  "ProviderComponent must have fetch_data function");
+
+    auto fetch_data_result = pComp.fetch_data();
+    return static_cast<const Derived &>(storage).convert_from_fetch(
+        fetch_data_result);
+  }
 };
 
 template <typename ProviderComponent>
-struct HasDropdownStateWithProvider : HasDropdownState {
-  return_type<ProviderComponent> provided_data;
+struct HasDropdownStateWithProvider
+    : public ProviderConsumer<HasDropdownStateWithProvider<ProviderComponent>,
+                              HasDropdownState, HasDropdownState::Options,
+                              ProviderComponent> {
 
-  static void
-  write_value_change_to_provider(const HasDropdownStateWithProvider &hdswp) {
+  using PC = ProviderConsumer<HasDropdownStateWithProvider<ProviderComponent>,
+                              HasDropdownState, HasDropdownState::Options,
+                              ProviderComponent>;
+
+  HasDropdownStateWithProvider() : PC() {}
+
+  virtual HasDropdownState::Options
+  convert_from_fetch(PC::return_type::type fetched_data) const override {
+
+    // TODO see message above
+    // static_assert(is_vector_data_convertible_to_string<
+    // decltype(fetch_data_result)>::value, "ProviderComponent::fetch_data must
+    // return a vector of items " "convertible to string");
+    HasDropdownState::Options new_options;
+    for (auto &data : fetched_data) {
+      new_options.push_back((std::string)data);
+    }
+    return new_options;
+  }
+
+  virtual void
+  write_value_change_to_provider(const HasDropdownState &hdswp) override {
     size_t index = hdswp.last_option_clicked;
 
     auto &entity =
@@ -394,40 +445,10 @@ struct HasDropdownStateWithProvider : HasDropdownState {
     ProviderComponent &pComp = entity.template get<ProviderComponent>();
 
     static_assert(
-        has_on_data_changed_member<ProviderComponent>::value,
+        PC::has_on_data_changed_member::value,
         "ProviderComponent must have on_data_changed(index) function");
     pComp.on_data_changed(index);
   }
-
-  static Options get_data_from_provider() {
-    // log_info("getting data from provider");
-    static_assert(std::is_base_of_v<BaseComponent, ProviderComponent>,
-                  "ProviderComponent must be a child of BaseComponent");
-    // Convert the data in the provider component to a list of options
-    auto &entity =
-        EQ().whereHasComponent<ProviderComponent>().gen_first_enforce();
-    ProviderComponent &pComp = entity.template get<ProviderComponent>();
-
-    static_assert(has_fetch_data_member<ProviderComponent>::value,
-                  "ProviderComponent must have fetch_data function");
-
-    auto fetch_data_result = pComp.fetch_data();
-
-    // TODO see message above
-    // static_assert(is_vector_data_convertible_to_string<
-    // decltype(fetch_data_result)>::value,
-    // "ProviderComponent::fetch_data must return a vector of items "
-    // "convertible to string");
-
-    Options new_options;
-    for (auto &data : fetch_data_result) {
-      new_options.push_back((std::string)data);
-    }
-    return new_options;
-  }
-
-  HasDropdownStateWithProvider()
-      : HasDropdownState({{}}, get_data_from_provider, nullptr) {}
 };
 
 // TODO i like this but for Tags, i wish
@@ -579,7 +600,7 @@ struct UpdateDropdownOptions
                                      float) override {
 
     // TODO maybe we should fetch only once a second or something?
-    const auto options = hasDropdownState.fetch_options();
+    const auto options = hasDropdownState.fetch_options(hasDropdownState);
 
     if (options.size() == hasDropdownState.options.size()) {
       bool any_changed = false;
@@ -699,9 +720,10 @@ void make_slider(vec2 position) {
   background.get<ui::HasChildrenComponent>().add_child(handle.id);
 }
 
-void make_dropdown(vec2 position,
-                   const std::function<ui::HasDropdownState::Options(void)> &fn,
-                   const std::function<void(size_t)> &on_change = nullptr) {
+void make_dropdown(
+    vec2 position,
+    const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
+    const std::function<void(size_t)> &on_change = nullptr) {
   auto &dropdown = EntityHelper::createEntity();
   dropdown.addComponent<ui::UIComponent>();
   dropdown.addComponent<ui::Transform>(position, button_size);
@@ -801,7 +823,7 @@ int main(void) {
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_checkbox(vec2{200, y + (o++ * s)});
   ui::make_slider(vec2{200, y + (o++ * s)});
-  ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
+  ui::make_dropdown(vec2{200, y + (o++ * s)}, [](auto &) {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
   ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
