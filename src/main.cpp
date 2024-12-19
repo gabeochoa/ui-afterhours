@@ -302,6 +302,20 @@ struct HasCheckboxState : BaseComponent {
   HasCheckboxState(bool b) : on(b) {}
 };
 
+struct HasSliderState : BaseComponent {
+  bool changed_since = false;
+  float value;
+  HasSliderState(float val) : value(val) {}
+};
+
+struct HasChildrenComponent : BaseComponent {
+  std::vector<EntityID> children;
+  HasChildrenComponent() {}
+  void add_child(EntityID child) { children.push_back(child); }
+};
+
+struct ShouldHide : BaseComponent {};
+
 struct HasDropdownState : HasCheckboxState {
   using Options = std::vector<std::string>;
   Options options;
@@ -413,20 +427,6 @@ struct HasDropdownStateWithProvider : HasDropdownState {
   HasDropdownStateWithProvider()
       : HasDropdownState({{}}, get_data_from_provider, nullptr) {}
 };
-
-struct HasSliderState : BaseComponent {
-  bool changed_since = false;
-  float value;
-  HasSliderState(float val) : value(val) {}
-};
-
-struct HasChildrenComponent : BaseComponent {
-  std::vector<EntityID> children;
-  HasChildrenComponent() {}
-  void add_child(EntityID child) { children.push_back(child); }
-};
-
-struct ShouldHide : BaseComponent {};
 
 // TODO i like this but for Tags, i wish
 // the user of this didnt have to add UIComponent to their for_each_with
@@ -571,7 +571,6 @@ struct UpdateDropdownOptionsForProvider
     child.addComponent<ui::ShouldHide>();
 
     child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
-      std::cout << " i " << i << "\n";
       ui::HasDropdownState &hds = entity.get<HDS>();
       if (hds.on_option_changed)
         hds.on_option_changed(i);
@@ -608,9 +607,6 @@ struct UpdateDropdownOptionsForProvider
       if (!any_changed)
         return;
     }
-    std::cout << " up" << options.size() << " "
-              << hasDropdownState.options.size() << std::endl;
-
     // update the children
 
     // delete existing
@@ -645,9 +641,8 @@ void make_button(vec2 position) {
   entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
-  entity.addComponent<ui::HasClickListener>([](Entity &button) {
-    std::cout << "I clicked the button " << button.id << std::endl;
-  });
+  entity.addComponent<ui::HasClickListener>(
+      [](Entity &button) { log_info("I clicked the button {}", button.id); });
 }
 
 void make_checkbox(vec2 position) {
@@ -659,7 +654,7 @@ void make_checkbox(vec2 position) {
   entity.addComponent<ui::HasLabel>(
       raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " "));
   entity.addComponent<ui::HasClickListener>([](Entity &checkbox) {
-    std::cout << "I clicked the checkbox" << checkbox.id << std::endl;
+    log_info("I clicked the checkbox {}", checkbox.id);
     checkbox.get<ui::HasCheckboxState>().on =
         !checkbox.get<ui::HasCheckboxState>().on;
     checkbox.get<ui ::HasLabel>().label = raylib::TextFormat(
@@ -706,8 +701,7 @@ void make_slider(vec2 position) {
     Transform &child_transform = opt_child->get<Transform>();
     child_transform.position = {rect.x + position_offset, rect.y};
 
-    std::cout << "I clicked the slider" << entity.id << " " << value
-              << std::endl;
+    log_info("I clicked the slider {} {}", entity.id, value);
   });
 
   auto &handle = EntityHelper::createEntity();
@@ -733,11 +727,10 @@ void make_dropdown(vec2 position,
   dropdown.addComponent<ui::HasChildrenComponent>();
   dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
     bool nv = !entity.get<ui::HasDropdownState>().on;
-    std::cout << "dropdown " << nv << " " << std::endl;
+    log_info("dropdown {}", nv);
 
     for (auto id : entity.get<HasChildrenComponent>().children) {
       auto opt_child = EQ().whereID(id).gen_first();
-      // std::cout << opt_child->id << std::endl;
       if (nv) {
         opt_child->removeComponent<ShouldHide>();
       } else {
@@ -752,20 +745,23 @@ void make_dropdown(vec2 position,
 template <typename ProviderComponent> void make_dropdown(vec2 position) {
   using WRDS = ui::HasDropdownStateWithProvider<ProviderComponent>;
 
-  auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<ui::UIComponent>();
-  dropdown.addComponent<ui::Transform>(position, button_size);
-  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
-  dropdown.addComponent<WRDS>();
-  dropdown.addComponent<ui::HasLabel>();
-  dropdown.addComponent<ui::HasChildrenComponent>();
-  dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
+  /*
+   * I would like to make something like this,
+   * but again this break the System<HasClicklistener>
+   * thing
+template <typename ProviderComponent>
+struct HasDropdownClickListener : HasClickListener {
+    using WRDS = ui::HasDropdownStateWithProvider<ProviderComponent>;
+
+  HasDropdownClickListener()
+      : HasClickListener([](Entity &entity) { dropdown_click(entity); }) {}
+};
+*/
+  const auto dropdown_click = [](Entity &entity) {
     bool nv = !entity.get<WRDS>().on;
-    std::cout << "dropdown " << nv << " " << std::endl;
 
     for (auto id : entity.get<HasChildrenComponent>().children) {
       auto opt_child = EQ().whereID(id).gen_first();
-      // std::cout << opt_child->id << std::endl;
       if (nv) {
         opt_child->removeComponent<ShouldHide>();
       } else {
@@ -779,7 +775,16 @@ template <typename ProviderComponent> void make_dropdown(vec2 position) {
       WRDS &wrds = entity.get<WRDS>();
       wrds.write_value_change_to_provider(wrds);
     }
-  });
+  };
+
+  auto &dropdown = EntityHelper::createEntity();
+  dropdown.addComponent<ui::UIComponent>();
+  dropdown.addComponent<ui::Transform>(position, button_size);
+  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
+  dropdown.addComponent<WRDS>();
+  dropdown.addComponent<ui::HasLabel>();
+  dropdown.addComponent<ui::HasChildrenComponent>();
+  dropdown.addComponent<ui::HasClickListener>(dropdown_click);
 }
 
 } // namespace ui
@@ -827,13 +832,16 @@ int main(void) {
   }
 
   systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
-  systems.register_update_system(std::make_unique<ui::HandleTabbing>());
-  systems.register_update_system(std::make_unique<ui::HandleClicks>());
-  systems.register_update_system(std::make_unique<ui::HandleDrags>());
-  systems.register_update_system(std::make_unique<ui::UpdateDropdownOptions>());
-  systems.register_update_system(
-      std::make_unique<ui::UpdateDropdownOptionsForProvider<
-          window_manager::ProvidesAvailableWindowResolutions>>());
+  {
+    systems.register_update_system(std::make_unique<ui::HandleTabbing>());
+    systems.register_update_system(std::make_unique<ui::HandleClicks>());
+    systems.register_update_system(std::make_unique<ui::HandleDrags>());
+    systems.register_update_system(
+        std::make_unique<ui::UpdateDropdownOptions>());
+    systems.register_update_system(
+        std::make_unique<ui::UpdateDropdownOptionsForProvider<
+            window_manager::ProvidesAvailableWindowResolutions>>());
+  }
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
   // renders
