@@ -377,8 +377,9 @@ struct HasDropdownStateWithProvider : HasDropdownState {
         EQ().whereHasComponent<ProviderComponent>().gen_first_enforce();
     ProviderComponent &pComp = entity.template get<ProviderComponent>();
 
-    static_assert(has_on_data_changed_member<ProviderComponent>::value,
-                  "ProviderComponent must have on_data_changed(int) function");
+    static_assert(
+        has_on_data_changed_member<ProviderComponent>::value,
+        "ProviderComponent must have on_data_changed(index) function");
     pComp.on_data_changed(index);
   }
 
@@ -534,11 +535,28 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
   }
 };
 
-template <typename ProviderComponent>
+template <typename ProviderComponent = void>
 struct UpdateDropdownOptionsForProvider
-    : SystemWithUIContext<Transform,
-                          HasDropdownStateWithProvider<ProviderComponent>,
-                          HasChildrenComponent> {
+    : SystemWithUIContext<
+          Transform,
+          // TODO make an "OR" first-class helper for this?
+          //
+          // component Base and Derived
+          // imagine an entity with only Derived
+          // entity.has<Derived> => true
+          //
+          // entity.has<Base> would return false,
+          // even though in some times we would want it to be true
+
+          std::conditional_t<std::is_same_v<ProviderComponent, void>,
+                             HasDropdownState,
+                             HasDropdownStateWithProvider<ProviderComponent>>,
+          HasChildrenComponent> {
+
+  using HDS =
+      std::conditional_t<std::is_same_v<ProviderComponent, void>,
+                         HasDropdownState,
+                         HasDropdownStateWithProvider<ProviderComponent>>;
 
   void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
                            const std::string &option) {
@@ -554,94 +572,10 @@ struct UpdateDropdownOptionsForProvider
 
     child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
       std::cout << " i " << i << "\n";
-      ui::HasDropdownState &hds =
-          entity.get<HasDropdownStateWithProvider<ProviderComponent>>();
+      ui::HasDropdownState &hds = entity.get<HDS>();
       if (hds.on_option_changed)
         hds.on_option_changed(i);
-      entity.get<HasDropdownStateWithProvider<ProviderComponent>>()
-          .last_option_clicked = i;
-      entity.get<ui::HasClickListener>().cb(entity);
-
-      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
-      opt_context->get<ui::UIContext>().set_focus(entity.id);
-
-      entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
-    });
-  }
-
-  virtual void for_each_with(
-      Entity &entity, UIComponent &, Transform &transform,
-      HasDropdownStateWithProvider<ProviderComponent> &hasDropdownState,
-      HasChildrenComponent &hasChildren, float) override {
-
-    // TODO maybe we should fetch only once a second or something?
-    const auto options = hasDropdownState.fetch_options();
-
-    if (options.size() == hasDropdownState.options.size()) {
-      bool any_changed = false;
-      for (size_t i = 0; i < options.size(); i++) {
-        auto option = options[i];
-        auto old_option = hasDropdownState.options[i];
-        if (option != old_option) {
-          any_changed = true;
-          break;
-        }
-      }
-
-      // no need to regenerate UI
-      if (!any_changed)
-        return;
-    }
-    std::cout << " up" << options.size() << " "
-              << hasDropdownState.options.size() << std::endl;
-
-    // update the children
-
-    // delete existing
-    {
-      for (auto &child_id : hasChildren.children) {
-        EntityHelper::markIDForCleanup(child_id);
-      }
-      hasChildren.children.clear();
-    }
-
-    for (size_t i = 0; i < options.size(); i++) {
-      auto &option = options[i];
-      make_dropdown_child(transform, entity, i, option);
-    }
-
-    hasDropdownState.last_option_clicked =
-        (size_t)std::max(std::min((int)options.size() - 1,
-                                  (int)hasDropdownState.last_option_clicked),
-                         0);
-    entity.get<HasLabel>().label =
-        options[hasDropdownState.last_option_clicked];
-
-    hasDropdownState.options = options;
-  }
-};
-
-struct UpdateDropdownOptions
-    : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
-
-  void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
-                           const std::string &option) {
-    auto &child = EntityHelper::createEntity();
-    entity.get<HasChildrenComponent>().add_child(child.id);
-    child.addComponent<ui::UIComponent>();
-    child.addComponent<ui::Transform>(
-        transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
-        button_size);
-    child.addComponent<ui::HasColor>(raylib::PURPLE);
-    child.addComponent<ui::HasLabel>(option);
-    child.addComponent<ui::ShouldHide>();
-
-    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
-      std::cout << " i " << i << "\n";
-      ui::HasDropdownState &hds = entity.get<ui::HasDropdownState>();
-      if (hds.on_option_changed)
-        hds.on_option_changed(i);
-      entity.get<ui::HasDropdownState>().last_option_clicked = i;
+      entity.get<HDS>().last_option_clicked = i;
       entity.get<ui::HasClickListener>().cb(entity);
 
       OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
@@ -652,8 +586,7 @@ struct UpdateDropdownOptions
   }
 
   virtual void for_each_with(Entity &entity, UIComponent &,
-                             Transform &transform,
-                             HasDropdownState &hasDropdownState,
+                             Transform &transform, HDS &hasDropdownState,
                              HasChildrenComponent &hasChildren,
                              float) override {
 
@@ -703,6 +636,8 @@ struct UpdateDropdownOptions
     hasDropdownState.options = options;
   }
 };
+
+struct UpdateDropdownOptions : UpdateDropdownOptionsForProvider<> {};
 
 void make_button(vec2 position) {
   auto &entity = EntityHelper::createEntity();
@@ -876,31 +811,6 @@ int main(void) {
   });
   ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
       vec2{400, y});
-
-  /*
-  ui::make_dropdown(
-      vec2{400, y},
-      []() {
-        std::vector<std::string> resolutions;
-        for (auto &rez : window_manager::fetch_available_resolutions()) {
-          std::string fmt =
-              raylib::TextFormat("%i x %i", rez.width, rez.height);
-          resolutions.push_back(fmt);
-        }
-        return resolutions;
-      },
-      [](size_t index) {
-        std::cout << "click" << index << "\n";
-        auto resolution = window_manager::fetch_available_resolutions()[index];
-        raylib::SetWindowSize(resolution.width, resolution.height);
-
-        auto opt_pcr =
-            EQ().whereHasComponent<window_manager::ProvidesCurrentResolution>()
-                .gen_first();
-        opt_pcr->get<window_manager::ProvidesCurrentResolution>()
-            .current_resolution = resolution;
-      });
-      */
 
   SystemManager systems;
 
