@@ -636,14 +636,12 @@ void make_checkbox(vec2 position) {
   entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasCheckboxState>(false);
-  entity.addComponent<ui::HasLabel>(
-      raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " "));
+  entity.addComponent<ui::HasLabel>(" ");
   entity.addComponent<ui::HasClickListener>([](Entity &checkbox) {
     log_info("I clicked the checkbox {}", checkbox.id);
-    checkbox.get<ui::HasCheckboxState>().on =
-        !checkbox.get<ui::HasCheckboxState>().on;
-    checkbox.get<ui ::HasLabel>().label = raylib::TextFormat(
-        "%s", checkbox.get<HasCheckboxState>().on ? "X" : " ");
+    ui::HasCheckboxState &hcs = checkbox.get<ui::HasCheckboxState>();
+    hcs.on = !hcs.on;
+    checkbox.get<ui::HasLabel>().label = fmt::format("{}", hcs.on ? "X" : " ");
   });
 }
 
