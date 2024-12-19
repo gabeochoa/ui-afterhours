@@ -12,12 +12,14 @@ backward::SignalHandling sh;
 //
 #include "log/log.h"
 //
+#define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
+#define AFTER_HOURS_REPLACE_LOGGING
 #define AFTER_HOURS_ENTITY_HELPER
 #define AFTER_HOURS_ENTITY_QUERY
 #define AFTER_HOURS_SYSTEM
 #include "afterhours/ah.h"
 #define AFTER_HOURS_USE_RAYLIB
-#include "afterhours/src/plugins/developer.h"
+#include "afterhours/src/developer.h"
 #include "afterhours/src/plugins/input_system.h"
 #include "afterhours/src/plugins/window_manager.h"
 #include <cassert>
@@ -67,7 +69,7 @@ enum class InputAction {
   ValueUp,
 };
 
-using afterhours::input::InputCollector;
+using afterhours::input;
 
 auto get_mapping() {
   std::map<InputAction, input::ValidInputs> mapping;
