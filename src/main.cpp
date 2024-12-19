@@ -535,28 +535,14 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
   }
 };
 
-template <typename ProviderComponent = void>
-struct UpdateDropdownOptionsForProvider
-    : SystemWithUIContext<
-          Transform,
-          // TODO make an "OR" first-class helper for this?
-          //
-          // component Base and Derived
-          // imagine an entity with only Derived
-          // entity.has<Derived> => true
-          //
-          // entity.has<Base> would return false,
-          // even though in some times we would want it to be true
+struct UpdateDropdownOptions
+    : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
 
-          std::conditional_t<std::is_same_v<ProviderComponent, void>,
-                             HasDropdownState,
-                             HasDropdownStateWithProvider<ProviderComponent>>,
-          HasChildrenComponent> {
-
-  using HDS =
-      std::conditional_t<std::is_same_v<ProviderComponent, void>,
-                         HasDropdownState,
-                         HasDropdownStateWithProvider<ProviderComponent>>;
+  UpdateDropdownOptions()
+      : SystemWithUIContext<Transform, HasDropdownState,
+                            HasChildrenComponent>() {
+    include_derived_children = true;
+  }
 
   void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
                            const std::string &option) {
@@ -571,10 +557,10 @@ struct UpdateDropdownOptionsForProvider
     child.addComponent<ui::ShouldHide>();
 
     child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
-      ui::HasDropdownState &hds = entity.get<HDS>();
+      ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
       if (hds.on_option_changed)
         hds.on_option_changed(i);
-      entity.get<HDS>().last_option_clicked = i;
+      hds.last_option_clicked = i;
       entity.get<ui::HasClickListener>().cb(entity);
 
       OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
@@ -584,10 +570,11 @@ struct UpdateDropdownOptionsForProvider
     });
   }
 
-  virtual void for_each_with(Entity &entity, UIComponent &,
-                             Transform &transform, HDS &hasDropdownState,
-                             HasChildrenComponent &hasChildren,
-                             float) override {
+  virtual void for_each_with_derived(Entity &entity, UIComponent &,
+                                     Transform &transform,
+                                     HasDropdownState &hasDropdownState,
+                                     HasChildrenComponent &hasChildren,
+                                     float) override {
 
     // TODO maybe we should fetch only once a second or something?
     const auto options = hasDropdownState.fetch_options();
@@ -632,8 +619,6 @@ struct UpdateDropdownOptionsForProvider
     hasDropdownState.options = options;
   }
 };
-
-struct UpdateDropdownOptions : UpdateDropdownOptionsForProvider<> {};
 
 void make_button(vec2 position) {
   auto &entity = EntityHelper::createEntity();
@@ -756,6 +741,7 @@ struct HasDropdownClickListener : HasClickListener {
   HasDropdownClickListener()
       : HasClickListener([](Entity &entity) { dropdown_click(entity); }) {}
 };
+
 */
   const auto dropdown_click = [](Entity &entity) {
     bool nv = !entity.get<WRDS>().on;
@@ -785,6 +771,10 @@ struct HasDropdownClickListener : HasClickListener {
   dropdown.addComponent<ui::HasLabel>();
   dropdown.addComponent<ui::HasChildrenComponent>();
   dropdown.addComponent<ui::HasClickListener>(dropdown_click);
+
+  log_info("has child {}", dropdown.has_child_of<HasDropdownState>());
+  log_info("get child {}",
+           type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
 }
 
 } // namespace ui
@@ -838,9 +828,6 @@ int main(void) {
     systems.register_update_system(std::make_unique<ui::HandleDrags>());
     systems.register_update_system(
         std::make_unique<ui::UpdateDropdownOptions>());
-    systems.register_update_system(
-        std::make_unique<ui::UpdateDropdownOptionsForProvider<
-            window_manager::ProvidesAvailableWindowResolutions>>());
   }
   systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
 
