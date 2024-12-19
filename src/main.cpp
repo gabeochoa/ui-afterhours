@@ -351,19 +351,45 @@ template <typename T> struct has_fetch_data_member {
   static constexpr bool value = decltype(test<T>(0))::value;
 };
 
+template <typename T> struct has_on_data_changed_member {
+  template <typename U>
+  static auto test(U *) -> decltype(std::declval<U>().on_data_changed(0),
+                                    void(), std::true_type{});
+
+  template <typename U> static auto test(...) -> std::false_type;
+
+  static constexpr bool value = decltype(test<T>(0))::value;
+};
+
+template <typename T> struct return_type {
+  using type = decltype(std::declval<T>().fetch_data());
+};
+
 template <typename ProviderComponent>
 struct HasDropdownStateWithProvider : HasDropdownState {
+  return_type<ProviderComponent> provided_data;
+
+  static void
+  write_value_change_to_provider(const HasDropdownStateWithProvider &hdswp) {
+    size_t index = hdswp.last_option_clicked;
+
+    auto &entity =
+        EQ().whereHasComponent<ProviderComponent>().gen_first_enforce();
+    ProviderComponent &pComp = entity.template get<ProviderComponent>();
+
+    static_assert(has_on_data_changed_member<ProviderComponent>::value,
+                  "ProviderComponent must have on_data_changed(int) function");
+    pComp.on_data_changed(index);
+  }
 
   static Options get_data_from_provider() {
     // log_info("getting data from provider");
     static_assert(std::is_base_of_v<BaseComponent, ProviderComponent>,
                   "ProviderComponent must be a child of BaseComponent");
     // Convert the data in the provider component to a list of options
-    auto opt_component =
-        EQ().whereHasComponent<ProviderComponent>().gen_first();
-    if (!opt_component.valid())
-      return {{}};
-    ProviderComponent &pComp = opt_component->template get<ProviderComponent>();
+    auto &entity =
+        EQ().whereHasComponent<ProviderComponent>().gen_first_enforce();
+    ProviderComponent &pComp = entity.template get<ProviderComponent>();
 
     static_assert(has_fetch_data_member<ProviderComponent>::value,
                   "ProviderComponent must have fetch_data function");
@@ -599,7 +625,6 @@ struct UpdateDropdownOptions
     : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
 
   void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
-                           const std::vector<std::string> &options,
                            const std::string &option) {
     auto &child = EntityHelper::createEntity();
     entity.get<HasChildrenComponent>().add_child(child.id);
@@ -665,7 +690,7 @@ struct UpdateDropdownOptions
 
     for (size_t i = 0; i < options.size(); i++) {
       auto &option = options[i];
-      make_dropdown_child(transform, entity, i, options, option);
+      make_dropdown_child(transform, entity, i, option);
     }
 
     hasDropdownState.last_option_clicked =
@@ -789,9 +814,8 @@ void make_dropdown(vec2 position,
   });
 }
 
-void make_dropdown(vec2 position) {
-  using WRDS = ui::HasDropdownStateWithProvider<
-      window_manager::ProvidesAvailableWindowResolutions>;
+template <typename ProviderComponent> void make_dropdown(vec2 position) {
+  using WRDS = ui::HasDropdownStateWithProvider<ProviderComponent>;
 
   auto &dropdown = EntityHelper::createEntity();
   dropdown.addComponent<ui::UIComponent>();
@@ -817,16 +841,8 @@ void make_dropdown(vec2 position) {
     entity.get<WRDS>().on = nv;
 
     if (!nv) {
-      int index = entity.get<WRDS>().last_option_clicked;
-
-      auto resolution = window_manager::fetch_available_resolutions()[index];
-      raylib::SetWindowSize(resolution.width, resolution.height);
-
-      auto opt_pcr =
-          EQ().whereHasComponent<window_manager::ProvidesCurrentResolution>()
-              .gen_first();
-      opt_pcr->get<window_manager::ProvidesCurrentResolution>()
-          .current_resolution = resolution;
+      WRDS &wrds = entity.get<WRDS>();
+      wrds.write_value_change_to_provider(wrds);
     }
   });
 }
@@ -858,7 +874,8 @@ int main(void) {
   ui::make_dropdown(vec2{200, y + (o++ * s)}, []() {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
-  ui::make_dropdown(vec2{300, y});
+  ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
+      vec2{400, y});
 
   /*
   ui::make_dropdown(
