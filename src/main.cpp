@@ -1,8 +1,7 @@
 
 
+#include "std_include.h"
 //
-#include <iostream>
-#include <set>
 
 #include "rl.h"
 //
@@ -279,8 +278,9 @@ struct Transform : BaseComponent {
   }
 
   raylib::Rectangle focus_rect(int rw = 2) const {
-    return raylib::Rectangle{position.x - rw, position.y - rw,
-                             size.x + (2 * rw), size.y + (2 * rw)};
+    return raylib::Rectangle{position.x - (float)rw, position.y - (float)rw,
+                             size.x + (2.f * (float)rw),
+                             size.y + (2.f * (float)rw)};
   }
 };
 
@@ -445,8 +445,8 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
     }
     raylib::DrawRectangleV(transform.position, transform.size, col);
     if (entity.has<HasLabel>()) {
-      DrawText(entity.get<HasLabel>().label.c_str(), transform.position.x,
-               transform.position.y, (int)transform.size.y / 2.f,
+      DrawText(entity.get<HasLabel>().label.c_str(), (int)transform.position.x,
+               (int)transform.position.y, (int)(transform.size.y / 2.f),
                raylib::RAYWHITE);
     }
   }
@@ -462,7 +462,8 @@ struct UpdateDropdownOptions
     entity.get<HasChildrenComponent>().add_child(child.id);
     child.addComponent<ui::UIComponent>();
     child.addComponent<ui::Transform>(
-        transform.position + vec2{0, button_size.y * (i + 1)}, button_size);
+        transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
+        button_size);
     child.addComponent<ui::HasColor>(raylib::PURPLE);
     child.addComponent<ui::HasLabel>(option);
     child.addComponent<ui::ShouldHide>();
@@ -541,8 +542,8 @@ void make_button(vec2 position) {
   entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
-  entity.addComponent<ui::HasClickListener>([](Entity &entity) {
-    std::cout << "I clicked the button " << entity.id << std::endl;
+  entity.addComponent<ui::HasClickListener>([](Entity &button) {
+    std::cout << "I clicked the button " << button.id << std::endl;
   });
 }
 
@@ -554,12 +555,12 @@ void make_checkbox(vec2 position) {
   entity.addComponent<ui::HasCheckboxState>(false);
   entity.addComponent<ui::HasLabel>(
       raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " "));
-  entity.addComponent<ui::HasClickListener>([](Entity &entity) {
-    std::cout << "I clicked the checkbox" << entity.id << std::endl;
-    entity.get<ui::HasCheckboxState>().on =
-        !entity.get<ui::HasCheckboxState>().on;
-    entity.get<ui ::HasLabel>().label =
-        raylib::TextFormat("%s", entity.get<HasCheckboxState>().on ? "X" : " ");
+  entity.addComponent<ui::HasClickListener>([](Entity &checkbox) {
+    std::cout << "I clicked the checkbox" << checkbox.id << std::endl;
+    checkbox.get<ui::HasCheckboxState>().on =
+        !checkbox.get<ui::HasCheckboxState>().on;
+    checkbox.get<ui ::HasLabel>().label = raylib::TextFormat(
+        "%s", checkbox.get<HasCheckboxState>().on ? "X" : " ");
   });
 }
 
@@ -665,8 +666,8 @@ int main(void) {
   }
 
   float y = 200;
-  int o = 0;
-  int s = 75;
+  float o = 0;
+  float s = 75;
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_button(vec2{200, y + (o++ * s)});
   ui::make_checkbox(vec2{200, y + (o++ * s)});

@@ -4,16 +4,17 @@
 
 #include <iostream>
 
-#ifdef __APPLE__
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
 #pragma clang diagnostic ignored "-Wdeprecated-volatile"
 #pragma clang diagnostic ignored "-Wmissing-field-initializers"
-#endif
-
-#ifdef WIN32
+#elif defined(__GNUC__)
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
 #endif
 
 namespace raylib {
@@ -29,12 +30,8 @@ namespace raylib {
 #define MAGIC_ENUM_RANGE_MAX 400
 #include <magic_enum/magic_enum.hpp>
 
-#ifdef __APPLE__
+#ifdef __clang__
 #pragma clang diagnostic pop
-#else
-#pragma enable_warn
-#endif
-
-#ifdef WIN32
+#elif defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
