@@ -44,8 +44,6 @@ template <class... Ts> struct overloaded : Ts... {
 template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
 } // namespace myutil
 
-// TODO i kinda dont like that you have to do this even if you dont want to
-// customize it
 struct EQ : public EntityQuery<EQ> {};
 
 struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
