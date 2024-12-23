@@ -674,6 +674,7 @@ int main(void) {
       ;
   }
 
+
   {
     auto &entity = EntityHelper::createEntity();
     entity.addComponent<ui::UIComponent>()
@@ -687,10 +688,33 @@ int main(void) {
               .dim = ui::Dim::Pixels,
               .value = button_size.y,
           })
+          .set_parent(Sophie.id)
         ;
     entity.addComponent<ui::HasColor>(raylib::PURPLE);
     Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
+
+  {
+    auto &entity = EntityHelper::createEntity();
+    entity.addComponent<ui::UIComponent>()
+          .set_desired_x(ui::Size{
+              // TODO figure out how to update this 
+              // when resolution changes 
+              .dim = ui::Dim::Pixels,
+              .value = button_size.x,
+          })
+          .set_desired_y(ui::Size{
+              .dim = ui::Dim::Percent,
+              .value = 0.5f,
+          })
+          .set_parent(Sophie.id)
+        ;
+    entity.addComponent<ui::HasColor>(raylib::BEIGE);
+    Sophie.get<ui::UIComponent>().add_child(entity.id);
+  }
+
+  afterhours::ui::AutoLayout::autolayout(Sophie.get<ui::UIComponent>());
+  afterhours::ui::AutoLayout::print_tree(Sophie.get<ui::UIComponent>());
 
 
   float y = 200;
