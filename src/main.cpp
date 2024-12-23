@@ -856,7 +856,7 @@ int main(void) {
   // renders
   {
     systems.register_render_system(
-        [&]() { raylib::ClearBackground(raylib::DARKGRAY); });
+        [&](float) { raylib::ClearBackground(raylib::DARKGRAY); });
     systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
     systems.register_render_system(std::make_unique<RenderFPS>());
   }
