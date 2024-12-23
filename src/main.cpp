@@ -9,6 +9,7 @@ backward::SignalHandling sh;
 #include "rl.h"
 
 #include "std_include.h"
+#include <cassert>
 //
 #include "log/log.h"
 //
@@ -22,7 +23,6 @@ backward::SignalHandling sh;
 #include "afterhours/src/developer.h"
 #include "afterhours/src/plugins/input_system.h"
 #include "afterhours/src/plugins/window_manager.h"
-#include <cassert>
 
 //
 using namespace afterhours;
@@ -34,6 +34,12 @@ typedef raylib::Vector4 vec4;
 constexpr float distance_sq(const vec2 a, const vec2 b) {
   return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 }
+
+#define RectangleType raylib::Rectangle
+#define Vector2Type vec2
+#include "afterhours/src/plugins/autolayout.h"
+#include "afterhours/src/plugins/ui.h"
+
 
 namespace myutil {
 
@@ -91,176 +97,14 @@ auto get_mapping() {
   return mapping;
 }
 
-namespace ui {
-inline bool is_mouse_inside(const input::MousePosition &mouse_pos,
-                            const raylib::Rectangle &rect) {
-  return mouse_pos.x >= rect.x && mouse_pos.x <= rect.x + rect.width &&
-         mouse_pos.y >= rect.y && mouse_pos.y <= rect.y + rect.height;
-}
-
-struct UIComponent : BaseComponent {};
-struct UIContext : BaseComponent {
-  EntityID ROOT = -1;
-  EntityID FAKE = -2;
-
-  std::set<EntityID> focused_ids;
-
-  EntityID hot_id = ROOT;
-  EntityID focus_id = ROOT;
-  EntityID active_id = ROOT;
-  EntityID last_processed = ROOT;
-
-  input::MousePosition mouse_pos;
-  bool mouseLeftDown;
-  InputAction last_action;
-  std::bitset<magic_enum::enum_count<InputAction>()> all_actions;
-
-  [[nodiscard]] bool is_hot(EntityID id) { return hot_id == id; };
-  [[nodiscard]] bool is_active(EntityID id) { return active_id == id; };
-  void set_hot(EntityID id) { hot_id = id; }
-  void set_active(EntityID id) { active_id = id; }
-
-  bool has_focus(EntityID id) { return focus_id == id; }
-  void set_focus(EntityID id) { focus_id = id; }
-
-  void active_if_mouse_inside(EntityID id, raylib::Rectangle rect) {
-    if (is_mouse_inside(mouse_pos, rect)) {
-      set_hot(id);
-      if (is_active(ROOT) && mouseLeftDown) {
-        set_active(id);
-      }
-    }
-  }
-
-  void reset() {
-    focus_id = ROOT;
-    last_processed = ROOT;
-    hot_id = ROOT;
-    active_id = ROOT;
-    focused_ids.clear();
-  }
-
-  void try_to_grab(EntityID id) {
-    focused_ids.insert(id);
-    if (has_focus(ROOT)) {
-      set_focus(id);
-    }
-  }
-
-  [[nodiscard]] bool is_mouse_click(EntityID id) {
-    bool let_go = !mouseLeftDown;
-    bool was_click = let_go && is_active(id) && is_hot(id);
-    // if(was_click){play_sound();}
-    return was_click;
-  }
-
-  [[nodiscard]] bool pressed(const InputAction &name) {
-    bool a = last_action == name;
-    if (a) {
-      // ui::sounds::select();
-      last_action = InputAction::None;
-    }
-    return a;
-  }
-
-  [[nodiscard]] bool is_held_down(const InputAction &name) {
-    bool a = all_actions[magic_enum::enum_index<InputAction>(name).value()];
-    if (a) {
-      // ui::sounds::select();
-      all_actions[magic_enum::enum_index<InputAction>(name).value()] = false;
-    }
-    return a;
-  }
-
-  void process_tabbing(EntityID id) {
-    // TODO How do we handle something that wants to use
-    // Widget Value Down/Up to control the value?
-    // Do we mark the widget type with "nextable"? (tab will always work but
-    // not very discoverable
-
-    if (has_focus(id)) {
-      if (
-          //
-          pressed(InputAction::WidgetNext) || pressed(InputAction::ValueDown)
-          // TODO add support for holding down tab
-          // get().is_held_down_debounced(InputAction::WidgetNext) ||
-          // get().is_held_down_debounced(InputAction::ValueDown)
-      ) {
-        set_focus(ROOT);
-        if (is_held_down(InputAction::WidgetMod)) {
-          set_focus(last_processed);
-        }
-      }
-      if (pressed(InputAction::ValueUp)) {
-        set_focus(last_processed);
-      }
-      // if (pressed(InputAction::WidgetBack)) {
-      // set_focus(last_processed);
-      // }
-    }
-    // before any returns
-    last_processed = id;
-  }
-};
-
-struct BeginUIContextManager : System<UIContext> {
-
-  // TODO this should live inside input_system
-  // but then it would require magic_enum as a dependency
-  std::bitset<magic_enum::enum_count<InputAction>()> inputs_as_bits(
-      const std::vector<input::ActionDone<InputAction>> &inputs) const {
-    std::bitset<magic_enum::enum_count<InputAction>()> output;
-    for (auto &input : inputs) {
-      if (input.amount_pressed <= 0.f)
-        continue;
-      output[magic_enum::enum_index<InputAction>(input.action).value()] = true;
-    }
-    return output;
-  }
-
-  virtual void for_each_with(Entity &, UIContext &context, float) override {
-    context.mouse_pos = input::get_mouse_position();
-    context.mouseLeftDown = input::is_mouse_button_down(0);
-
-    {
-      input::PossibleInputCollector<InputAction> inpc =
-          input::get_input_collector<InputAction>();
-      if (inpc.has_value()) {
-        context.all_actions = inputs_as_bits(inpc.inputs());
-        for (auto &actions_done : inpc.inputs_pressed()) {
-          context.last_action = actions_done.action;
-        }
-      }
-    }
-
-    context.hot_id = context.ROOT;
-  }
-};
-
-struct EndUIContextManager : System<UIContext> {
-
-  virtual void for_each_with(Entity &, UIContext &context, float) override {
-
-    if (context.focus_id == context.ROOT)
-      return;
-
-    if (context.mouseLeftDown) {
-      if (context.is_active(context.ROOT)) {
-        context.set_active(context.FAKE);
-      }
-    } else {
-      context.set_active(context.ROOT);
-    }
-    if (!context.focused_ids.contains(context.focus_id))
-      context.focus_id = context.ROOT;
-    context.focused_ids.clear();
-  }
-};
+namespace afterhours {
+    namespace ui {
 
 struct Transform : BaseComponent {
   vec2 position;
   vec2 size;
   Transform(vec2 pos, vec2 sz) : position(pos), size(sz) {}
+
   raylib::Rectangle rect() const {
     return raylib::Rectangle{position.x, position.y, size.x, size.y};
   }
@@ -270,42 +114,12 @@ struct Transform : BaseComponent {
                              size.x + (2.f * (float)rw),
                              size.y + (2.f * (float)rw)};
   }
+
 };
 
 struct HasColor : BaseComponent {
   raylib::Color color;
   HasColor(raylib::Color c) : color(c) {}
-};
-
-struct HasClickListener : BaseComponent {
-  bool down = false;
-  std::function<void(Entity &)> cb;
-  HasClickListener(const std::function<void(Entity &)> &callback)
-      : cb(callback) {}
-};
-
-struct HasDragListener : BaseComponent {
-  bool down = false;
-  std::function<void(Entity &)> cb;
-  HasDragListener(const std::function<void(Entity &)> &callback)
-      : cb(callback) {}
-};
-
-struct HasLabel : BaseComponent {
-  std::string label;
-  HasLabel(const std::string &str) : label(str) {}
-  HasLabel() : label("") {}
-};
-
-struct HasCheckboxState : BaseComponent {
-  bool on;
-  HasCheckboxState(bool b) : on(b) {}
-};
-
-struct HasSliderState : BaseComponent {
-  bool changed_since = false;
-  float value;
-  HasSliderState(float val) : value(val) {}
 };
 
 struct HasChildrenComponent : BaseComponent {
@@ -314,9 +128,7 @@ struct HasChildrenComponent : BaseComponent {
   void add_child(EntityID child) { children.push_back(child); }
 };
 
-struct ShouldHide : BaseComponent {};
-
-struct HasDropdownState : HasCheckboxState {
+struct HasDropdownState : ui::HasCheckboxState {
   using Options = std::vector<std::string>;
   Options options;
   std::function<Options(HasDropdownState &)> fetch_options;
@@ -455,12 +267,14 @@ template <typename... Components>
 struct SystemWithUIContext : System<UIComponent, Components...> {
   Entity *context_entity;
   virtual void once(float) override {
-    OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
+    OptEntity opt_context = EQ()//
+        .whereHasComponent<ui::UIContext<InputAction>>()//
+        .gen_first();
     context_entity = opt_context.value();
   }
 };
 
-struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
+struct HandleClicks : SystemWithUIContext<Transform, ui::HasClickListener> {
   virtual ~HandleClicks() {}
 
   virtual void for_each_with(Entity &entity, UIComponent &,
@@ -471,7 +285,7 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
       return;
     if (entity.has<ShouldHide>())
       return;
-    UIContext &context = context_entity->get<UIContext>();
+    UIContext<InputAction>&context = context_entity->get<UIContext<InputAction>>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
 
@@ -488,7 +302,7 @@ struct HandleClicks : SystemWithUIContext<Transform, HasClickListener> {
   }
 };
 
-struct HandleDrags : SystemWithUIContext<Transform, HasDragListener> {
+struct HandleDrags : SystemWithUIContext<Transform, ui::HasDragListener> {
   virtual ~HandleDrags() {}
 
   virtual void for_each_with(Entity &entity, UIComponent &,
@@ -496,7 +310,7 @@ struct HandleDrags : SystemWithUIContext<Transform, HasDragListener> {
                              HasDragListener &hasDragListener, float) override {
     if (!context_entity)
       return;
-    UIContext &context = context_entity->get<UIContext>();
+    UIContext<InputAction>&context = context_entity->get<UIContext<InputAction>>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
 
@@ -522,7 +336,7 @@ struct HandleTabbing : SystemWithUIContext<> {
     if (entity.has<ShouldHide>())
       return;
 
-    UIContext &context = context_entity->get<UIContext>();
+    UIContext<InputAction> &context = context_entity->get<UIContext<InputAction>>();
     context.try_to_grab(entity.id);
     context.process_tabbing(entity.id);
   }
@@ -537,7 +351,7 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
       return;
     if (entity.has<ShouldHide>())
       return;
-    UIContext &context = context_entity->get<UIContext>();
+    UIContext<InputAction> &context = context_entity->get<UIContext<InputAction>>();
 
     raylib::Color col = hasColor.color;
     if (context.is_hot(entity.id)) {
@@ -569,7 +383,7 @@ struct UpdateDropdownOptions
                            const std::string &option) {
     auto &child = EntityHelper::createEntity();
     entity.get<HasChildrenComponent>().add_child(child.id);
-    child.addComponent<ui::UIComponent>();
+    child.addComponent<UIComponent>();
     child.addComponent<ui::Transform>(
         transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
         button_size);
@@ -584,8 +398,8 @@ struct UpdateDropdownOptions
       hds.last_option_clicked = i;
       entity.get<ui::HasClickListener>().cb(entity);
 
-      OptEntity opt_context = EQ().whereHasComponent<UIContext>().gen_first();
-      opt_context->get<ui::UIContext>().set_focus(entity.id);
+      OptEntity opt_context = EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
+      opt_context->get<ui::UIContext<InputAction>>().set_focus(entity.id);
 
       entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
     });
@@ -643,7 +457,7 @@ struct UpdateDropdownOptions
 
 void make_button(vec2 position) {
   auto &entity = EntityHelper::createEntity();
-  entity.addComponent<ui::UIComponent>();
+  entity.addComponent<UIComponent>();
   entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
@@ -653,7 +467,7 @@ void make_button(vec2 position) {
 
 void make_checkbox(vec2 position) {
   auto &entity = EntityHelper::createEntity();
-  entity.addComponent<ui::UIComponent>();
+  entity.addComponent<UIComponent>();
   entity.addComponent<ui::Transform>(position, button_size);
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasCheckboxState>(false);
@@ -670,7 +484,7 @@ void make_slider(vec2 position) {
   // TODO add vertical slider
 
   auto &background = EntityHelper::createEntity();
-  background.addComponent<ui::UIComponent>();
+  background.addComponent<UIComponent>();
   background.addComponent<ui::Transform>(position,
                                          vec2{button_size.x, button_size.y});
   background.addComponent<ui::HasSliderState>(0.5f);
@@ -709,7 +523,7 @@ void make_slider(vec2 position) {
   });
 
   auto &handle = EntityHelper::createEntity();
-  handle.addComponent<ui::UIComponent>();
+  handle.addComponent<UIComponent>();
   handle.addComponent<ui::Transform>(
       position, vec2{button_size.x * 0.25f, button_size.y});
   handle.addComponent<ui::HasColor>(raylib::BLUE);
@@ -723,7 +537,7 @@ void make_dropdown(
     const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
     const std::function<void(size_t)> &on_change = nullptr) {
   auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<ui::UIComponent>();
+  dropdown.addComponent<UIComponent>();
   dropdown.addComponent<ui::Transform>(position, button_size);
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
   dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
@@ -745,6 +559,17 @@ void make_dropdown(
 
     entity.get<ui::HasDropdownState>().on = nv;
   });
+}
+
+void make_div(){
+  auto &div = EntityHelper::createEntity();
+  div.addComponent<ui::UIComponent>()
+      .set_desired_x(Size{.dim = Dim::Children})
+      .set_desired_y(Size{.dim = Dim::Children})
+      ;
+  div.addComponent<ui::HasColor>(raylib::BLUE);
+  div.addComponent<ui::HasChildrenComponent>();
+
 }
 
 template <typename ProviderComponent> void make_dropdown(vec2 position) {
@@ -797,7 +622,27 @@ struct HasDropdownClickListener : HasClickListener {
            type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
 }
 
+struct RenderAutoLayoutRoots : System<AutoLayoutRoot, UIComponent> {
+
+    void render(const Entity& entity) const{
+      const UIComponent& cmp = entity.get<UIComponent>();
+      if(entity.has<HasColor>()){
+        raylib::DrawRectanglePro(cmp.rect(),{0,0}, 0, entity.get<HasColor>().color);
+      }
+
+      for(EntityID child : cmp.children){
+          render(AutoLayout::to_ent(child));
+      }
+    }
+
+  virtual void for_each_with(const Entity & entity, const AutoLayoutRoot &, const UIComponent&, float) const override {
+      render(entity);
+  }
+};
+
+
 } // namespace ui
+} // namespace afterhours
 
 int main(void) {
   const int screenWidth = 1280;
@@ -807,12 +652,46 @@ int main(void) {
   raylib::SetTargetFPS(200);
 
   // sophie
+  auto &Sophie = EntityHelper::createEntity();
+  {
+    input::add_singleton_components<InputAction>(Sophie, get_mapping());
+    window_manager::add_singleton_components(Sophie, 200);
+    Sophie.addComponent<ui::UIContext<InputAction>>();
+
+    // making a root component to attach the UI to 
+    Sophie.addComponent<ui::AutoLayoutRoot>();
+    Sophie.addComponent<ui::UIComponent>()
+      .set_desired_x(ui::Size{
+          // TODO figure out how to update this 
+          // when resolution changes 
+          .dim = ui::Dim::Pixels,
+          .value = screenWidth,
+      })
+      .set_desired_y(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = screenHeight,
+      })
+      ;
+  }
+
   {
     auto &entity = EntityHelper::createEntity();
-    input::add_singleton_components<InputAction>(entity, get_mapping());
-    window_manager::add_singleton_components(entity, 200);
-    entity.addComponent<ui::UIContext>();
+    entity.addComponent<ui::UIComponent>()
+          .set_desired_x(ui::Size{
+              // TODO figure out how to update this 
+              // when resolution changes 
+              .dim = ui::Dim::Pixels,
+              .value = button_size.x,
+          })
+          .set_desired_y(ui::Size{
+              .dim = ui::Dim::Pixels,
+              .value = button_size.y,
+          })
+        ;
+    entity.addComponent<ui::HasColor>(raylib::PURPLE);
+    Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
+
 
   float y = 200;
   float o = 0;
@@ -841,21 +720,24 @@ int main(void) {
     window_manager::register_update_systems(systems);
   }
 
-  systems.register_update_system(std::make_unique<ui::BeginUIContextManager>());
+  systems.register_update_system(std::make_unique<ui::BeginUIContextManager<InputAction>>());
   {
     systems.register_update_system(std::make_unique<ui::HandleTabbing>());
     systems.register_update_system(std::make_unique<ui::HandleClicks>());
     systems.register_update_system(std::make_unique<ui::HandleDrags>());
     systems.register_update_system(
         std::make_unique<ui::UpdateDropdownOptions>());
+    systems.register_update_system(
+        std::make_unique<ui::RunAutoLayout>());
   }
-  systems.register_update_system(std::make_unique<ui::EndUIContextManager>());
+  systems.register_update_system(std::make_unique<ui::EndUIContextManager<InputAction>>());
 
   // renders
   {
     systems.register_render_system(
         [&](float) { raylib::ClearBackground(raylib::DARKGRAY); });
     systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
+    systems.register_render_system(std::make_unique<ui::RenderAutoLayoutRoots>());
     systems.register_render_system(std::make_unique<RenderFPS>());
   }
 
