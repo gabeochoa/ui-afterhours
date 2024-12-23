@@ -31,6 +31,12 @@ namespace raylib {
 #define MAGIC_ENUM_RANGE_MAX 400
 #include <magic_enum/magic_enum.hpp>
 
+#define FMT_HEADER_ONLY
+#include <fmt/args.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
+
 #ifdef __clang__
 #pragma clang diagnostic pop
 #elif defined(__GNUC__)
