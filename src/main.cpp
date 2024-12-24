@@ -273,11 +273,10 @@ struct SystemWithUIContext : System<UIComponent, Components...> {
   }
 };
 
-struct HandleClicks : SystemWithUIContext<Transform, ui::HasClickListener> {
+struct HandleClicks : SystemWithUIContext<ui::HasClickListener> {
   virtual ~HandleClicks() {}
 
-  virtual void for_each_with(Entity &entity, UIComponent &,
-                             Transform &transform,
+  virtual void for_each_with(Entity &entity, UIComponent &component,
                              HasClickListener &hasClickListener,
                              float) override {
     if (!context_entity)
@@ -287,7 +286,7 @@ struct HandleClicks : SystemWithUIContext<Transform, ui::HasClickListener> {
     UIContext<InputAction> &context =
         context_entity->get<UIContext<InputAction>>();
 
-    context.active_if_mouse_inside(entity.id, transform.rect());
+    context.active_if_mouse_inside(entity.id, component.rect());
 
     if (context.has_focus(entity.id) &&
         context.pressed(InputAction::WidgetPress)) {
@@ -302,18 +301,17 @@ struct HandleClicks : SystemWithUIContext<Transform, ui::HasClickListener> {
   }
 };
 
-struct HandleDrags : SystemWithUIContext<Transform, ui::HasDragListener> {
+struct HandleDrags : SystemWithUIContext<ui::HasDragListener> {
   virtual ~HandleDrags() {}
 
-  virtual void for_each_with(Entity &entity, UIComponent &,
-                             Transform &transform,
+  virtual void for_each_with(Entity &entity, UIComponent &component,
                              HasDragListener &hasDragListener, float) override {
     if (!context_entity)
       return;
     UIContext<InputAction> &context =
         context_entity->get<UIContext<InputAction>>();
 
-    context.active_if_mouse_inside(entity.id, transform.rect());
+    context.active_if_mouse_inside(entity.id, component.rect());
 
     if (context.has_focus(entity.id) &&
         context.pressed(InputAction::WidgetPress)) {
@@ -386,7 +384,7 @@ struct UpdateDropdownOptions
                            const std::string &option) {
     auto &child = EntityHelper::createEntity();
     entity.get<HasChildrenComponent>().add_child(child.id);
-    child.addComponent<UIComponent>();
+    child.addComponent<UIComponent>(child.id);
     child.addComponent<ui::Transform>(
         transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
         button_size);
@@ -459,20 +457,40 @@ struct UpdateDropdownOptions
   }
 };
 
-void make_button(vec2 position) {
+void make_button(Entity &parent) {
   auto &entity = EntityHelper::createEntity();
-  entity.addComponent<UIComponent>();
-  entity.addComponent<ui::Transform>(position, button_size);
+  entity.addComponent<UIComponent>(entity.id)
+      .set_desired_x(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x,
+      })
+      .set_desired_y(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.y,
+      })
+      .set_parent(parent.id);
+  parent.get<ui::UIComponent>().add_child(entity.id);
+
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
   entity.addComponent<ui::HasClickListener>(
       [](Entity &button) { log_info("I clicked the button {}", button.id); });
 }
 
-void make_checkbox(vec2 position) {
+void make_checkbox(Entity &parent) {
   auto &entity = EntityHelper::createEntity();
-  entity.addComponent<UIComponent>();
-  entity.addComponent<ui::Transform>(position, button_size);
+  entity.addComponent<UIComponent>(entity.id)
+      .set_desired_x(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x,
+      })
+      .set_desired_y(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.y,
+      })
+      .set_parent(parent.id);
+  parent.get<ui::UIComponent>().add_child(entity.id);
+
   entity.addComponent<ui::HasColor>(raylib::BLUE);
   entity.addComponent<ui::HasCheckboxState>(false);
   entity.addComponent<ui::HasLabel>(" ");
@@ -484,22 +502,30 @@ void make_checkbox(vec2 position) {
   });
 }
 
-void make_slider(vec2 position) {
+void make_slider(Entity &parent) {
   // TODO add vertical slider
 
   auto &background = EntityHelper::createEntity();
-  background.addComponent<UIComponent>();
-  background.addComponent<ui::Transform>(position,
-                                         vec2{button_size.x, button_size.y});
+  background.addComponent<UIComponent>(background.id)
+      .set_desired_x(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x,
+      })
+      .set_desired_y(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.y,
+      })
+      .set_parent(parent.id);
+  parent.get<ui::UIComponent>().add_child(background.id);
+
   background.addComponent<ui::HasSliderState>(0.5f);
   background.addComponent<ui::HasColor>(raylib::GREEN);
-
   background.addComponent<ui::HasDragListener>([](Entity &entity) {
     float mnf = 0.f;
     float mxf = 1.f;
 
-    Transform &transform = entity.get<Transform>();
-    raylib::Rectangle rect = transform.rect();
+    UIComponent &cmp = entity.get<UIComponent>();
+    raylib::Rectangle rect = cmp.rect();
     HasSliderState &sliderState = entity.get<ui::HasSliderState>();
     float &value = sliderState.value;
 
@@ -520,16 +546,25 @@ void make_slider(vec2 position) {
         EQ().whereID(entity.get<ui::HasChildrenComponent>().children[0])
             .gen_first();
 
-    Transform &child_transform = opt_child->get<Transform>();
-    child_transform.position = {rect.x + position_offset, rect.y};
+    UIComponent &child_cmp = opt_child->get<UIComponent>();
+    child_cmp.computed_rel[0] = rect.x + position_offset;
 
     log_info("I clicked the slider {} {}", entity.id, value);
   });
 
   auto &handle = EntityHelper::createEntity();
-  handle.addComponent<UIComponent>();
-  handle.addComponent<ui::Transform>(
-      position, vec2{button_size.x * 0.25f, button_size.y});
+  handle.addComponent<UIComponent>(handle.id)
+      .set_desired_x(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x * 0.25f,
+      })
+      .set_desired_y(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.y,
+      })
+      .set_parent(background.id);
+  background.get<ui::UIComponent>().add_child(handle.id);
+
   handle.addComponent<ui::HasColor>(raylib::BLUE);
 
   background.addComponent<ui::HasChildrenComponent>();
@@ -541,7 +576,7 @@ void make_dropdown(
     const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
     const std::function<void(size_t)> &on_change = nullptr) {
   auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<UIComponent>();
+  dropdown.addComponent<UIComponent>(dropdown.id);
   dropdown.addComponent<ui::Transform>(position, button_size);
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
   dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
@@ -567,7 +602,7 @@ void make_dropdown(
 
 void make_div() {
   auto &div = EntityHelper::createEntity();
-  div.addComponent<ui::UIComponent>()
+  div.addComponent<ui::UIComponent>(div.id)
       .set_desired_x(Size{.dim = Dim::Children})
       .set_desired_y(Size{.dim = Dim::Children});
   div.addComponent<ui::HasColor>(raylib::BLUE);
@@ -624,13 +659,35 @@ struct HasDropdownClickListener : HasClickListener {
            type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
 }
 
-struct RenderAutoLayoutRoots : System<AutoLayoutRoot, UIComponent> {
+struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
+
+  void render_me(const Entity &entity) const {
+    const UIComponent &cmp = entity.get<UIComponent>();
+
+    UIContext<InputAction> &context =
+        context_entity->get<UIContext<InputAction>>();
+
+    raylib::Color col = entity.get<HasColor>().color;
+
+    if (context.is_hot(entity.id)) {
+      col = raylib::RED;
+    }
+
+    if (context.has_focus(entity.id)) {
+      raylib::DrawRectangleRec(cmp.focus_rect(), raylib::PINK);
+    }
+    raylib::DrawRectangleRec(cmp.rect(), col);
+    if (entity.has<HasLabel>()) {
+      DrawText(entity.get<HasLabel>().label.c_str(), (int)cmp.x(), (int)cmp.y(),
+               (int)(cmp.height() / 2.f), raylib::RAYWHITE);
+    }
+  }
 
   void render(const Entity &entity) const {
     const UIComponent &cmp = entity.get<UIComponent>();
+
     if (entity.has<HasColor>()) {
-      raylib::DrawRectanglePro(cmp.rect(), {0, 0}, 0,
-                               entity.get<HasColor>().color);
+      render_me(entity);
     }
 
     for (EntityID child : cmp.children) {
@@ -638,8 +695,8 @@ struct RenderAutoLayoutRoots : System<AutoLayoutRoot, UIComponent> {
     }
   }
 
-  virtual void for_each_with(const Entity &entity, const AutoLayoutRoot &,
-                             const UIComponent &, float) const override {
+  virtual void for_each_with(const Entity &entity, const UIComponent &,
+                             const AutoLayoutRoot &, float) const override {
     render(entity);
   }
 };
@@ -663,7 +720,7 @@ int main(void) {
 
     // making a root component to attach the UI to
     Sophie.addComponent<ui::AutoLayoutRoot>();
-    Sophie.addComponent<ui::UIComponent>()
+    Sophie.addComponent<ui::UIComponent>(Sophie.id)
         .set_desired_x(ui::Size{
             // TODO figure out how to update this
             // when resolution changes
@@ -678,10 +735,8 @@ int main(void) {
 
   {
     auto &entity = EntityHelper::createEntity();
-    entity.addComponent<ui::UIComponent>()
+    entity.addComponent<ui::UIComponent>(entity.id)
         .set_desired_x(ui::Size{
-            // TODO figure out how to update this
-            // when resolution changes
             .dim = ui::Dim::Pixels,
             .value = button_size.x,
         })
@@ -696,10 +751,8 @@ int main(void) {
 
   {
     auto &entity = EntityHelper::createEntity();
-    entity.addComponent<ui::UIComponent>()
+    entity.addComponent<ui::UIComponent>(entity.id)
         .set_desired_x(ui::Size{
-            // TODO figure out how to update this
-            // when resolution changes
             .dim = ui::Dim::Pixels,
             .value = button_size.x,
         })
@@ -712,21 +765,21 @@ int main(void) {
     Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
 
+  // float y = 200;
+  // float o = 0;
+  // float s = 75;
+  // ui::make_button(Sophie);
+  // ui::make_checkbox(Sophie);
+  ui::make_slider(Sophie);
+
+  // ui::make_dropdown(vec2{200, y + (o++ * s)}, [](auto &) {
+  // return std::vector<std::string>{{"default", "option1", "option2"}};
+  // });
+  // ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
+  // vec2{400, y});
+
   afterhours::ui::AutoLayout::autolayout(Sophie.get<ui::UIComponent>());
   afterhours::ui::AutoLayout::print_tree(Sophie.get<ui::UIComponent>());
-
-  float y = 200;
-  float o = 0;
-  float s = 75;
-  ui::make_button(vec2{200, y + (o++ * s)});
-  ui::make_button(vec2{200, y + (o++ * s)});
-  ui::make_checkbox(vec2{200, y + (o++ * s)});
-  ui::make_slider(vec2{200, y + (o++ * s)});
-  ui::make_dropdown(vec2{200, y + (o++ * s)}, [](auto &) {
-    return std::vector<std::string>{{"default", "option1", "option2"}};
-  });
-  ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
-      vec2{400, y});
 
   SystemManager systems;
 
