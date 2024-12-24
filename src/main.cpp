@@ -397,26 +397,6 @@ struct UpdateDropdownOptions
     if (hds.on || hds.last_option_clicked == i) {
       entity.get<UIComponent>().add_child(child.id);
     }
-
-    /*
-    child.get<ui::HasColor>(raylib::PURPLE);
-    child.get<ui::HasLabel>(option);
-    child.get<ui::HasClickListener>([i, &entity](Entity &) {
-      log_info("click child {}", i);
-      ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
-      if (hds.on_option_changed)
-        hds.on_option_changed(i);
-      hds.last_option_clicked = i;
-
-      entity.get<ui::HasClickListener>().cb(entity);
-
-      OptEntity opt_context =
-          EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
-      opt_context->get<ui::UIContext<InputAction>>().set_focus(entity.id);
-
-      entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
-    });
-    */
   }
 
   void make_dropdown_child(UIComponent &component, Entity &entity, size_t i,
@@ -440,14 +420,10 @@ struct UpdateDropdownOptions
     if (hds.on || hds.last_option_clicked == i) {
       entity.get<UIComponent>().add_child(child.id);
     }
-    // child.addComponent<ui::Transform>(
-    // transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
-    // button_size);
     child.addComponent<ui::HasColor>(raylib::PURPLE);
     child.addComponent<ui::HasLabel>(option);
 
     child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
-      log_info("click child {}", i);
       ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
       if (hds.on_option_changed)
         hds.on_option_changed(i);
@@ -478,34 +454,9 @@ struct UpdateDropdownOptions
                                      float) override {
 
     // TODO maybe we should fetch only once a second or something?
+
     const auto options = hasDropdownState.fetch_options(hasDropdownState);
-
-    /*
-    if (options.size() == hasDropdownState.options.size()) {
-      bool any_changed = false;
-      for (size_t i = 0; i < options.size(); i++) {
-        auto option = options[i];
-        auto old_option = hasDropdownState.options[i];
-        if (option != old_option) {
-          any_changed = true;
-          break;
-        }
-      }
-
-      // no need to regenerate UI
-      if (!any_changed)
-        return;
-    }
-    */
-    // update the children
-
     // delete existing
-    if (0) {
-      for (auto &child_id : hasChildren.children) {
-        EntityHelper::markIDForCleanup(child_id);
-      }
-      hasChildren.children.clear();
-    }
     component.children.clear();
 
     for (size_t i = 0; i < options.size(); i++) {
