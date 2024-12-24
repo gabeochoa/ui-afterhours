@@ -492,7 +492,7 @@ struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
     }
 
     for (EntityID child : cmp.children) {
-      render(AutoLayout::to_ent(child));
+      render(AutoLayout::to_ent_static(child));
     }
   }
 
