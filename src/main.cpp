@@ -121,30 +121,6 @@ struct HasColor : BaseComponent {
   HasColor(raylib::Color c) : color(c) {}
 };
 
-struct HasChildrenComponent : BaseComponent {
-  std::vector<EntityID> children;
-  HasChildrenComponent() {}
-  void add_child(EntityID child) { children.push_back(child); }
-};
-
-struct HasDropdownState : ui::HasCheckboxState {
-  using Options = std::vector<std::string>;
-  Options options;
-  std::function<Options(HasDropdownState &)> fetch_options;
-  std::function<void(size_t)> on_option_changed;
-  size_t last_option_clicked = 0;
-
-  HasDropdownState(
-      const Options &opts,
-      const std::function<Options(HasDropdownState &)> fetch_opts = nullptr,
-      const std::function<void(size_t)> opt_changed = nullptr)
-      : HasCheckboxState(false), options(opts), fetch_options(fetch_opts),
-        on_option_changed(opt_changed) {}
-
-  HasDropdownState(const std::function<Options(HasDropdownState &)> fetch_opts)
-      : HasDropdownState(fetch_opts(*this), fetch_opts, nullptr) {}
-};
-
 // TODO i really wanted to statically validate this
 // so that any developer would get a reasonable compiler msg
 // but i couldnt get it working with both trivial types and struct types
@@ -257,185 +233,6 @@ struct HasDropdownStateWithProvider
         PC::has_on_data_changed_member::value,
         "ProviderComponent must have on_data_changed(index) function");
     pComp.on_data_changed(index);
-  }
-};
-
-struct HandleDrags : SystemWithUIContext<InputAction, ui::HasDragListener> {
-  virtual ~HandleDrags() {}
-
-  virtual void for_each_with(Entity &entity, UIComponent &component,
-                             HasDragListener &hasDragListener, float) override {
-    if (!context_entity)
-      return;
-    UIContext<InputAction> &context =
-        context_entity->get<UIContext<InputAction>>();
-
-    context.active_if_mouse_inside(entity.id, component.rect());
-
-    if (context.has_focus(entity.id) &&
-        context.pressed(InputAction::WidgetPress)) {
-      context.set_focus(entity.id);
-      hasDragListener.cb(entity);
-    }
-
-    if (context.is_active(entity.id)) {
-      context.set_focus(entity.id);
-      hasDragListener.cb(entity);
-    }
-  }
-};
-
-struct HandleTabbing : SystemWithUIContext<InputAction> {
-  virtual ~HandleTabbing() {}
-
-  virtual void for_each_with(Entity &entity, UIComponent &, float) override {
-    if (!context_entity)
-      return;
-
-    UIContext<InputAction> &context =
-        context_entity->get<UIContext<InputAction>>();
-    context.try_to_grab(entity.id);
-    context.process_tabbing(entity.id);
-  }
-};
-
-struct RenderUIComponents
-    : SystemWithUIContext<InputAction, Transform, HasColor> {
-  virtual ~RenderUIComponents() {}
-  virtual void for_each_with(const Entity &entity, const UIComponent &,
-                             const Transform &transform,
-                             const HasColor &hasColor, float) const override {
-    if (!context_entity)
-      return;
-    if (entity.has<ShouldHide>())
-      return;
-    UIContext<InputAction> &context =
-        context_entity->get<UIContext<InputAction>>();
-
-    raylib::Color col = hasColor.color;
-    if (context.is_hot(entity.id)) {
-      col = raylib::RED;
-    }
-
-    if (context.has_focus(entity.id)) {
-      raylib::DrawRectangleRec(transform.focus_rect(), raylib::PINK);
-    }
-    raylib::DrawRectangleV(transform.position, transform.size, col);
-    if (entity.has<HasLabel>()) {
-      DrawText(entity.get<HasLabel>().label.c_str(), (int)transform.position.x,
-               (int)transform.position.y, (int)(transform.size.y / 2.f),
-               raylib::RAYWHITE);
-    }
-  }
-};
-
-struct UpdateDropdownOptions
-    : SystemWithUIContext<InputAction, HasDropdownState, HasChildrenComponent> {
-
-  UpdateDropdownOptions()
-      : SystemWithUIContext<InputAction, HasDropdownState,
-                            HasChildrenComponent>() {
-    include_derived_children = true;
-  }
-
-  void reuse_dropdown_child(UIComponent &component, Entity &entity, size_t i,
-                            const std::string &option) {
-    Entity &child =
-        EQ().whereID(entity.get<ui::HasChildrenComponent>().children[i])
-            .gen_first_enforce();
-
-    child.get<UIComponent>()
-        .set_desired_width(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.x,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.y,
-        })
-        .set_parent(entity.id);
-
-    HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
-    if (hds.on || hds.last_option_clicked == i) {
-      entity.get<UIComponent>().add_child(child.id);
-    }
-  }
-
-  void make_dropdown_child(UIComponent &component, Entity &entity, size_t i,
-                           const std::string &option) {
-    Entity &child = EntityHelper::createEntity();
-
-    child.addComponent<UIComponent>(child.id)
-        .set_desired_width(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.x,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.y,
-        })
-        .set_parent(entity.id);
-
-    entity.get<HasChildrenComponent>().add_child(child.id);
-
-    HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
-    if (hds.on || hds.last_option_clicked == i) {
-      entity.get<UIComponent>().add_child(child.id);
-    }
-    child.addComponent<ui::HasColor>(raylib::PURPLE);
-    child.addComponent<ui::HasLabel>(option);
-
-    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
-      ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
-      if (hds.on_option_changed)
-        hds.on_option_changed(i);
-      hds.last_option_clicked = i;
-
-      {
-        bool nv = !hds.on;
-        UIComponent &component = entity.get<UIComponent>();
-        for (auto id : entity.get<HasChildrenComponent>().children) {
-          if (nv) {
-            component.add_child(id);
-          } else {
-            component.remove_child(id);
-          }
-        }
-        entity.get<ui::HasDropdownState>().on = nv;
-      }
-
-      OptEntity opt_context =
-          EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
-      opt_context->get<ui::UIContext<InputAction>>().set_focus(entity.id);
-    });
-  }
-
-  virtual void for_each_with_derived(Entity &entity, UIComponent &component,
-                                     HasDropdownState &hasDropdownState,
-                                     HasChildrenComponent &hasChildren,
-                                     float) override {
-
-    // TODO maybe we should fetch only once a second or something?
-
-    const auto options = hasDropdownState.fetch_options(hasDropdownState);
-    // delete existing
-    component.children.clear();
-
-    for (size_t i = 0; i < options.size(); i++) {
-      auto &option = options[i];
-
-      if (hasChildren.children.size() > i) {
-        reuse_dropdown_child(component, entity, i, option);
-      } else {
-        make_dropdown_child(component, entity, i, option);
-      }
-    }
-
-    hasDropdownState.last_option_clicked =
-        (size_t)std::max(std::min((int)options.size() - 1,
-                                  (int)hasDropdownState.last_option_clicked),
-                         0);
-    hasDropdownState.options = options;
   }
 };
 
@@ -563,16 +360,17 @@ void make_slider(Entity &parent) {
   handle.addComponent<ui::HasColor>(raylib::BLUE);
 
   background.addComponent<ui::HasChildrenComponent>();
-  background.get<ui::HasChildrenComponent>().add_child(left_padding.id);
-  background.get<ui::HasChildrenComponent>().add_child(handle.id);
+  background.get<ui::HasChildrenComponent>().add_child(left_padding);
+  background.get<ui::HasChildrenComponent>().add_child(handle);
 }
 
 void make_dropdown(
-    Entity &parent, vec2 position,
+    Entity &parent,
     const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
     const std::function<void(size_t)> &on_change = nullptr) {
 
   auto &dropdown = EntityHelper::createEntity();
+
   dropdown.addComponent<UIComponent>(dropdown.id)
       .set_desired_width(ui::Size{
           .dim = ui::Dim::Pixels,
@@ -588,7 +386,13 @@ void make_dropdown(
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
   dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
                                               fn, on_change);
-  dropdown.addComponent<ui::HasChildrenComponent>();
+  dropdown.addComponent<ui::HasChildrenComponent>().register_on_child_add(
+      [](Entity &child) {
+        log_info("register");
+        if (child.is_missing<HasColor>()) {
+          child.addComponent<HasColor>(raylib::PURPLE);
+        }
+      });
 }
 
 template <typename ProviderComponent> void make_dropdown(vec2 position) {
@@ -642,14 +446,22 @@ struct HasDropdownClickListener : HasClickListener {
            type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
 }
 
-struct RenderAutoLayoutRoots
-    : SystemWithUIContext<InputAction, AutoLayoutRoot> {
+struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
+
+  Entity *context_entity;
+  virtual void once(float) override {
+    OptEntity opt_context =
+        EntityQuery()                                        //
+            .whereHasComponent<ui::UIContext<InputAction>>() //
+            .gen_first();
+    this->context_entity = opt_context.value();
+  }
 
   void render_me(const Entity &entity) const {
     const UIComponent &cmp = entity.get<UIComponent>();
 
     UIContext<InputAction> &context =
-        context_entity->get<UIContext<InputAction>>();
+        this->context_entity->get<UIContext<InputAction>>();
 
     raylib::Color col = entity.get<HasColor>().color;
 
@@ -717,53 +529,12 @@ int main(void) {
         });
   }
 
-  {
-    auto &entity = EntityHelper::createEntity();
-    entity.addComponent<ui::UIComponent>(entity.id)
-        .set_desired_width(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.x,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.y,
-        })
-        .set_parent(Sophie.id);
-    entity.addComponent<ui::HasColor>(raylib::PURPLE);
-    Sophie.get<ui::UIComponent>().add_child(entity.id);
-  }
-
-  {
-    auto &entity = EntityHelper::createEntity();
-    entity.addComponent<ui::UIComponent>(entity.id)
-        .set_desired_width(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.x,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Percent,
-            .value = 0.5f,
-        })
-        .set_parent(Sophie.id);
-    entity.addComponent<ui::HasColor>(raylib::BEIGE);
-    Sophie.get<ui::UIComponent>().add_child(entity.id);
-  }
-
-  float y = 200;
-  float o = 0;
-  float s = 75;
-  // ui::make_button(Sophie);
-  // ui::make_checkbox(Sophie);
-  // ui::make_slider(Sophie);
-
-  ui::make_dropdown(Sophie, vec2{200, y + (o++ * s)}, [](auto &) {
+  ui::make_dropdown(Sophie, [](auto &) {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
-  ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
-      vec2{400, y});
 
-  afterhours::ui::AutoLayout::autolayout(Sophie.get<ui::UIComponent>());
-  afterhours::ui::AutoLayout::print_tree(Sophie.get<ui::UIComponent>());
+  // ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
+  // vec2{400, y});
 
   SystemManager systems;
 
@@ -777,27 +548,13 @@ int main(void) {
   {
     input::register_update_systems<InputAction>(systems);
     window_manager::register_update_systems(systems);
+    ui::register_update_systems<InputAction>(systems);
   }
-
-  systems.register_update_system(
-      std::make_unique<ui::BeginUIContextManager<InputAction>>());
-  {
-    systems.register_update_system(
-        std::make_unique<ui::UpdateDropdownOptions>());
-    systems.register_update_system(std::make_unique<ui::RunAutoLayout>());
-    systems.register_update_system(std::make_unique<ui::HandleTabbing>());
-    systems.register_update_system(
-        std::make_unique<ui::HandleClicks<InputAction>>());
-    systems.register_update_system(std::make_unique<ui::HandleDrags>());
-  }
-  systems.register_update_system(
-      std::make_unique<ui::EndUIContextManager<InputAction>>());
 
   // renders
   {
     systems.register_render_system(
         [&](float) { raylib::ClearBackground(raylib::DARKGRAY); });
-    systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
     systems.register_render_system(
         std::make_unique<ui::RenderAutoLayoutRoots>());
     systems.register_render_system(std::make_unique<RenderFPS>());
