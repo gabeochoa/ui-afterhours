@@ -119,164 +119,6 @@ struct Transform : BaseComponent {
   }
 };
 
-void make_button(Entity &parent) {
-  auto &entity = EntityHelper::createEntity();
-  entity.addComponent<UIComponent>(entity.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.x,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.y,
-      })
-      .set_parent(parent.id);
-  parent.get<ui::UIComponent>().add_child(entity.id);
-
-  entity.addComponent<ui::HasColor>(raylib::BLUE);
-  entity.addComponent<ui::HasLabel>(raylib::TextFormat("button%i", entity.id));
-  entity.addComponent<ui::HasClickListener>(
-      [](Entity &button) { log_info("I clicked the button {}", button.id); });
-}
-
-void make_checkbox(Entity &parent) {
-  auto &entity = EntityHelper::createEntity();
-  entity.addComponent<UIComponent>(entity.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.x,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.y,
-      })
-      .set_parent(parent.id);
-  parent.get<ui::UIComponent>().add_child(entity.id);
-
-  entity.addComponent<ui::HasColor>(raylib::BLUE);
-  entity.addComponent<ui::HasCheckboxState>(false);
-  entity.addComponent<ui::HasLabel>(" ");
-  entity.addComponent<ui::HasClickListener>([](Entity &checkbox) {
-    log_info("I clicked the checkbox {}", checkbox.id);
-    ui::HasCheckboxState &hcs = checkbox.get<ui::HasCheckboxState>();
-    hcs.on = !hcs.on;
-    checkbox.get<ui::HasLabel>().label = fmt::format("{}", hcs.on ? "X" : " ");
-  });
-}
-
-void make_slider(Entity &parent) {
-  // TODO add vertical slider
-
-  auto &background = EntityHelper::createEntity();
-  background.addComponent<UIComponent>(background.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.x,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.y,
-      })
-      .set_parent(parent.id);
-  parent.get<ui::UIComponent>().add_child(background.id);
-
-  background.addComponent<ui::HasSliderState>(0.5f);
-  background.addComponent<ui::HasColor>(raylib::GREEN);
-  background.addComponent<ui::HasDragListener>([](Entity &entity) {
-    float mnf = 0.f;
-    float mxf = 1.f;
-
-    UIComponent &cmp = entity.get<UIComponent>();
-    raylib::Rectangle rect = cmp.rect();
-    HasSliderState &sliderState = entity.get<ui::HasSliderState>();
-    float &value = sliderState.value;
-
-    auto mouse_position = input::get_mouse_position();
-    float v = (mouse_position.x - rect.x) / rect.width;
-    if (v < mnf)
-      v = mnf;
-    if (v > mxf)
-      v = mxf;
-    if (v != value) {
-      value = v;
-      sliderState.changed_since = true;
-    }
-
-    auto opt_child =
-        EQ().whereID(entity.get<ui::HasChildrenComponent>().children[0])
-            .gen_first();
-
-    UIComponent &child_cmp = opt_child->get<UIComponent>();
-    child_cmp.set_desired_width(
-        ui::Size{.dim = ui::Dim::Percent, .value = value * 0.75f});
-
-    // log_info("I clicked the slider {} {}", entity.id, value);
-  });
-
-  // TODO replace when we have actual padding later
-  auto &left_padding = EntityHelper::createEntity();
-  left_padding.addComponent<UIComponent>(left_padding.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Percent,
-          .value = 0.f,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.y,
-      })
-      .set_parent(background.id);
-  background.get<ui::UIComponent>().add_child(left_padding.id);
-
-  auto &handle = EntityHelper::createEntity();
-  handle.addComponent<UIComponent>(handle.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.x * 0.25f,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.y,
-      })
-      .set_parent(background.id);
-  background.get<ui::UIComponent>().add_child(handle.id);
-
-  handle.addComponent<ui::HasColor>(raylib::BLUE);
-
-  background.addComponent<ui::HasChildrenComponent>();
-  background.get<ui::HasChildrenComponent>().add_child(left_padding);
-  background.get<ui::HasChildrenComponent>().add_child(handle);
-}
-
-void make_dropdown(
-    Entity &parent,
-    const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
-    const std::function<void(size_t)> &on_change = nullptr) {
-
-  auto &dropdown = EntityHelper::createEntity();
-
-  dropdown.addComponent<UIComponent>(dropdown.id)
-      .set_desired_width(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = button_size.x,
-      })
-      .set_desired_height(ui::Size{
-          .dim = ui::Dim::Children,
-          .value = button_size.y,
-      })
-      .set_parent(parent.id);
-  parent.get<ui::UIComponent>().add_child(dropdown.id);
-
-  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
-  dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
-                                              fn, on_change);
-  dropdown.addComponent<ui::HasChildrenComponent>().register_on_child_add(
-      [](Entity &child) {
-        if (child.is_missing<HasColor>()) {
-          child.addComponent<HasColor>(raylib::PURPLE);
-        }
-      });
-}
-
 } // namespace ui
 } // namespace afterhours
 
@@ -313,7 +155,6 @@ int main(void) {
     auto &dropdown =
         ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
             Sophie);
-    dropdown.addComponent<ui::HasColor>(raylib::BLUE);
     dropdown.get<ui::UIComponent>()
         .set_desired_width(ui::Size{
             .dim = ui::Dim::Pixels,
@@ -330,6 +171,8 @@ int main(void) {
           }
         });
   }
+
+  ui::make_slider(Sophie, button_size);
 
   SystemManager systems;
 
