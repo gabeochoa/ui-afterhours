@@ -119,11 +119,6 @@ struct Transform : BaseComponent {
   }
 };
 
-struct HasColor : BaseComponent {
-  raylib::Color color;
-  HasColor(raylib::Color c) : color(c) {}
-};
-
 // TODO i really wanted to statically validate this
 // so that any developer would get a reasonable compiler msg
 // but i couldnt get it working with both trivial types and struct types
@@ -451,57 +446,6 @@ struct HasDropdownClickListener : HasClickListener {
       max_options);
 }
 
-struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
-
-  Entity *context_entity;
-  virtual void once(float) override {
-    OptEntity opt_context =
-        EntityQuery()                                        //
-            .whereHasComponent<ui::UIContext<InputAction>>() //
-            .gen_first();
-    this->context_entity = opt_context.value();
-  }
-
-  void render_me(const Entity &entity) const {
-    const UIComponent &cmp = entity.get<UIComponent>();
-
-    UIContext<InputAction> &context =
-        this->context_entity->get<UIContext<InputAction>>();
-
-    raylib::Color col = entity.get<HasColor>().color;
-
-    if (context.is_hot(entity.id)) {
-      col = raylib::RED;
-    }
-
-    if (context.has_focus(entity.id)) {
-      raylib::DrawRectangleRec(cmp.focus_rect(), raylib::PINK);
-    }
-    raylib::DrawRectangleRec(cmp.rect(), col);
-    if (entity.has<HasLabel>()) {
-      DrawText(entity.get<HasLabel>().label.c_str(), (int)cmp.x(), (int)cmp.y(),
-               (int)(cmp.height() / 2.f), raylib::RAYWHITE);
-    }
-  }
-
-  void render(const Entity &entity) const {
-    const UIComponent &cmp = entity.get<UIComponent>();
-
-    if (entity.has<HasColor>()) {
-      render_me(entity);
-    }
-
-    for (EntityID child : cmp.children) {
-      render(AutoLayout::to_ent_static(child));
-    }
-  }
-
-  virtual void for_each_with(const Entity &entity, const UIComponent &,
-                             const AutoLayoutRoot &, float) const override {
-    render(entity);
-  }
-};
-
 } // namespace ui
 } // namespace afterhours
 
@@ -509,7 +453,7 @@ int main(void) {
   const int screenWidth = 1280;
   const int screenHeight = 720;
 
-  raylib::InitWindow(screenWidth, screenHeight, "wm-afterhours");
+  raylib::InitWindow(screenWidth, screenHeight, "ui-afterhours");
   raylib::SetTargetFPS(200);
 
   // sophie
@@ -534,10 +478,6 @@ int main(void) {
         });
   }
 
-  ui::make_dropdown(Sophie, [](auto &) {
-    return std::vector<std::string>{{"default", "option1", "option2"}};
-  });
-
   ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(Sophie);
 
   SystemManager systems;
@@ -559,8 +499,7 @@ int main(void) {
   {
     systems.register_render_system(
         [&](float) { raylib::ClearBackground(raylib::DARKGRAY); });
-    systems.register_render_system(
-        std::make_unique<ui::RenderAutoLayoutRoots>());
+    ui::register_render_systems<InputAction>(systems);
     systems.register_render_system(std::make_unique<RenderFPS>());
   }
 
