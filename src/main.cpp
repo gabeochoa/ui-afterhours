@@ -40,7 +40,6 @@ constexpr float distance_sq(const vec2 a, const vec2 b) {
 #include "afterhours/src/plugins/autolayout.h"
 #include "afterhours/src/plugins/ui.h"
 
-
 namespace myutil {
 
 template <class... Ts> struct overloaded : Ts... {
@@ -98,7 +97,7 @@ auto get_mapping() {
 }
 
 namespace afterhours {
-    namespace ui {
+namespace ui {
 
 struct Transform : BaseComponent {
   vec2 position;
@@ -114,7 +113,6 @@ struct Transform : BaseComponent {
                              size.x + (2.f * (float)rw),
                              size.y + (2.f * (float)rw)};
   }
-
 };
 
 struct HasColor : BaseComponent {
@@ -267,9 +265,10 @@ template <typename... Components>
 struct SystemWithUIContext : System<UIComponent, Components...> {
   Entity *context_entity;
   virtual void once(float) override {
-    OptEntity opt_context = EQ()//
-        .whereHasComponent<ui::UIContext<InputAction>>()//
-        .gen_first();
+    OptEntity opt_context =
+        EQ()                                                 //
+            .whereHasComponent<ui::UIContext<InputAction>>() //
+            .gen_first();
     context_entity = opt_context.value();
   }
 };
@@ -285,7 +284,8 @@ struct HandleClicks : SystemWithUIContext<Transform, ui::HasClickListener> {
       return;
     if (entity.has<ShouldHide>())
       return;
-    UIContext<InputAction>&context = context_entity->get<UIContext<InputAction>>();
+    UIContext<InputAction> &context =
+        context_entity->get<UIContext<InputAction>>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
 
@@ -310,7 +310,8 @@ struct HandleDrags : SystemWithUIContext<Transform, ui::HasDragListener> {
                              HasDragListener &hasDragListener, float) override {
     if (!context_entity)
       return;
-    UIContext<InputAction>&context = context_entity->get<UIContext<InputAction>>();
+    UIContext<InputAction> &context =
+        context_entity->get<UIContext<InputAction>>();
 
     context.active_if_mouse_inside(entity.id, transform.rect());
 
@@ -336,7 +337,8 @@ struct HandleTabbing : SystemWithUIContext<> {
     if (entity.has<ShouldHide>())
       return;
 
-    UIContext<InputAction> &context = context_entity->get<UIContext<InputAction>>();
+    UIContext<InputAction> &context =
+        context_entity->get<UIContext<InputAction>>();
     context.try_to_grab(entity.id);
     context.process_tabbing(entity.id);
   }
@@ -351,7 +353,8 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
       return;
     if (entity.has<ShouldHide>())
       return;
-    UIContext<InputAction> &context = context_entity->get<UIContext<InputAction>>();
+    UIContext<InputAction> &context =
+        context_entity->get<UIContext<InputAction>>();
 
     raylib::Color col = hasColor.color;
     if (context.is_hot(entity.id)) {
@@ -398,7 +401,8 @@ struct UpdateDropdownOptions
       hds.last_option_clicked = i;
       entity.get<ui::HasClickListener>().cb(entity);
 
-      OptEntity opt_context = EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
+      OptEntity opt_context =
+          EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
       opt_context->get<ui::UIContext<InputAction>>().set_focus(entity.id);
 
       entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
@@ -561,15 +565,13 @@ void make_dropdown(
   });
 }
 
-void make_div(){
+void make_div() {
   auto &div = EntityHelper::createEntity();
   div.addComponent<ui::UIComponent>()
       .set_desired_x(Size{.dim = Dim::Children})
-      .set_desired_y(Size{.dim = Dim::Children})
-      ;
+      .set_desired_y(Size{.dim = Dim::Children});
   div.addComponent<ui::HasColor>(raylib::BLUE);
   div.addComponent<ui::HasChildrenComponent>();
-
 }
 
 template <typename ProviderComponent> void make_dropdown(vec2 position) {
@@ -624,22 +626,23 @@ struct HasDropdownClickListener : HasClickListener {
 
 struct RenderAutoLayoutRoots : System<AutoLayoutRoot, UIComponent> {
 
-    void render(const Entity& entity) const{
-      const UIComponent& cmp = entity.get<UIComponent>();
-      if(entity.has<HasColor>()){
-        raylib::DrawRectanglePro(cmp.rect(),{0,0}, 0, entity.get<HasColor>().color);
-      }
-
-      for(EntityID child : cmp.children){
-          render(AutoLayout::to_ent(child));
-      }
+  void render(const Entity &entity) const {
+    const UIComponent &cmp = entity.get<UIComponent>();
+    if (entity.has<HasColor>()) {
+      raylib::DrawRectanglePro(cmp.rect(), {0, 0}, 0,
+                               entity.get<HasColor>().color);
     }
 
-  virtual void for_each_with(const Entity & entity, const AutoLayoutRoot &, const UIComponent&, float) const override {
-      render(entity);
+    for (EntityID child : cmp.children) {
+      render(AutoLayout::to_ent(child));
+    }
+  }
+
+  virtual void for_each_with(const Entity &entity, const AutoLayoutRoot &,
+                             const UIComponent &, float) const override {
+    render(entity);
   }
 };
-
 
 } // namespace ui
 } // namespace afterhours
@@ -658,38 +661,35 @@ int main(void) {
     window_manager::add_singleton_components(Sophie, 200);
     Sophie.addComponent<ui::UIContext<InputAction>>();
 
-    // making a root component to attach the UI to 
+    // making a root component to attach the UI to
     Sophie.addComponent<ui::AutoLayoutRoot>();
     Sophie.addComponent<ui::UIComponent>()
-      .set_desired_x(ui::Size{
-          // TODO figure out how to update this 
-          // when resolution changes 
-          .dim = ui::Dim::Pixels,
-          .value = screenWidth,
-      })
-      .set_desired_y(ui::Size{
-          .dim = ui::Dim::Pixels,
-          .value = screenHeight,
-      })
-      ;
+        .set_desired_x(ui::Size{
+            // TODO figure out how to update this
+            // when resolution changes
+            .dim = ui::Dim::Pixels,
+            .value = screenWidth,
+        })
+        .set_desired_y(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = screenHeight,
+        });
   }
-
 
   {
     auto &entity = EntityHelper::createEntity();
     entity.addComponent<ui::UIComponent>()
-          .set_desired_x(ui::Size{
-              // TODO figure out how to update this 
-              // when resolution changes 
-              .dim = ui::Dim::Pixels,
-              .value = button_size.x,
-          })
-          .set_desired_y(ui::Size{
-              .dim = ui::Dim::Pixels,
-              .value = button_size.y,
-          })
-          .set_parent(Sophie.id)
-        ;
+        .set_desired_x(ui::Size{
+            // TODO figure out how to update this
+            // when resolution changes
+            .dim = ui::Dim::Pixels,
+            .value = button_size.x,
+        })
+        .set_desired_y(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = button_size.y,
+        })
+        .set_parent(Sophie.id);
     entity.addComponent<ui::HasColor>(raylib::PURPLE);
     Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
@@ -697,25 +697,23 @@ int main(void) {
   {
     auto &entity = EntityHelper::createEntity();
     entity.addComponent<ui::UIComponent>()
-          .set_desired_x(ui::Size{
-              // TODO figure out how to update this 
-              // when resolution changes 
-              .dim = ui::Dim::Pixels,
-              .value = button_size.x,
-          })
-          .set_desired_y(ui::Size{
-              .dim = ui::Dim::Percent,
-              .value = 0.5f,
-          })
-          .set_parent(Sophie.id)
-        ;
+        .set_desired_x(ui::Size{
+            // TODO figure out how to update this
+            // when resolution changes
+            .dim = ui::Dim::Pixels,
+            .value = button_size.x,
+        })
+        .set_desired_y(ui::Size{
+            .dim = ui::Dim::Percent,
+            .value = 0.5f,
+        })
+        .set_parent(Sophie.id);
     entity.addComponent<ui::HasColor>(raylib::BEIGE);
     Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
 
   afterhours::ui::AutoLayout::autolayout(Sophie.get<ui::UIComponent>());
   afterhours::ui::AutoLayout::print_tree(Sophie.get<ui::UIComponent>());
-
 
   float y = 200;
   float o = 0;
@@ -744,24 +742,26 @@ int main(void) {
     window_manager::register_update_systems(systems);
   }
 
-  systems.register_update_system(std::make_unique<ui::BeginUIContextManager<InputAction>>());
+  systems.register_update_system(
+      std::make_unique<ui::BeginUIContextManager<InputAction>>());
   {
     systems.register_update_system(std::make_unique<ui::HandleTabbing>());
     systems.register_update_system(std::make_unique<ui::HandleClicks>());
     systems.register_update_system(std::make_unique<ui::HandleDrags>());
     systems.register_update_system(
         std::make_unique<ui::UpdateDropdownOptions>());
-    systems.register_update_system(
-        std::make_unique<ui::RunAutoLayout>());
+    systems.register_update_system(std::make_unique<ui::RunAutoLayout>());
   }
-  systems.register_update_system(std::make_unique<ui::EndUIContextManager<InputAction>>());
+  systems.register_update_system(
+      std::make_unique<ui::EndUIContextManager<InputAction>>());
 
   // renders
   {
     systems.register_render_system(
         [&](float) { raylib::ClearBackground(raylib::DARKGRAY); });
     systems.register_render_system(std::make_unique<ui::RenderUIComponents>());
-    systems.register_render_system(std::make_unique<ui::RenderAutoLayoutRoots>());
+    systems.register_render_system(
+        std::make_unique<ui::RenderAutoLayoutRoots>());
     systems.register_render_system(std::make_unique<RenderFPS>());
   }
 
