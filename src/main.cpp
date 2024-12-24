@@ -460,11 +460,11 @@ struct UpdateDropdownOptions
 void make_button(Entity &parent) {
   auto &entity = EntityHelper::createEntity();
   entity.addComponent<UIComponent>(entity.id)
-      .set_desired_x(ui::Size{
+      .set_desired_width(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.x,
       })
-      .set_desired_y(ui::Size{
+      .set_desired_height(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.y,
       })
@@ -480,11 +480,11 @@ void make_button(Entity &parent) {
 void make_checkbox(Entity &parent) {
   auto &entity = EntityHelper::createEntity();
   entity.addComponent<UIComponent>(entity.id)
-      .set_desired_x(ui::Size{
+      .set_desired_width(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.x,
       })
-      .set_desired_y(ui::Size{
+      .set_desired_height(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.y,
       })
@@ -507,11 +507,11 @@ void make_slider(Entity &parent) {
 
   auto &background = EntityHelper::createEntity();
   background.addComponent<UIComponent>(background.id)
-      .set_desired_x(ui::Size{
+      .set_desired_width(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.x,
       })
-      .set_desired_y(ui::Size{
+      .set_desired_height(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.y,
       })
@@ -540,25 +540,38 @@ void make_slider(Entity &parent) {
       sliderState.changed_since = true;
     }
 
-    float position_offset = value * rect.width * 0.75f;
-
     auto opt_child =
         EQ().whereID(entity.get<ui::HasChildrenComponent>().children[0])
             .gen_first();
 
     UIComponent &child_cmp = opt_child->get<UIComponent>();
-    child_cmp.computed_rel[0] = rect.x + position_offset;
+    child_cmp.set_desired_width(
+        ui::Size{.dim = ui::Dim::Percent, .value = value * 0.75f});
 
     log_info("I clicked the slider {} {}", entity.id, value);
   });
 
+  // TODO replace when we have actual padding later
+  auto &left_padding = EntityHelper::createEntity();
+  left_padding.addComponent<UIComponent>(left_padding.id)
+      .set_desired_width(ui::Size{
+          .dim = ui::Dim::Percent,
+          .value = 0.f,
+      })
+      .set_desired_height(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.y,
+      })
+      .set_parent(background.id);
+  background.get<ui::UIComponent>().add_child(left_padding.id);
+
   auto &handle = EntityHelper::createEntity();
   handle.addComponent<UIComponent>(handle.id)
-      .set_desired_x(ui::Size{
+      .set_desired_width(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.x * 0.25f,
       })
-      .set_desired_y(ui::Size{
+      .set_desired_height(ui::Size{
           .dim = ui::Dim::Pixels,
           .value = button_size.y,
       })
@@ -568,6 +581,7 @@ void make_slider(Entity &parent) {
   handle.addComponent<ui::HasColor>(raylib::BLUE);
 
   background.addComponent<ui::HasChildrenComponent>();
+  background.get<ui::HasChildrenComponent>().add_child(left_padding.id);
   background.get<ui::HasChildrenComponent>().add_child(handle.id);
 }
 
@@ -603,8 +617,8 @@ void make_dropdown(
 void make_div() {
   auto &div = EntityHelper::createEntity();
   div.addComponent<ui::UIComponent>(div.id)
-      .set_desired_x(Size{.dim = Dim::Children})
-      .set_desired_y(Size{.dim = Dim::Children});
+      .set_desired_width(Size{.dim = Dim::Children})
+      .set_desired_height(Size{.dim = Dim::Children});
   div.addComponent<ui::HasColor>(raylib::BLUE);
   div.addComponent<ui::HasChildrenComponent>();
 }
@@ -721,13 +735,13 @@ int main(void) {
     // making a root component to attach the UI to
     Sophie.addComponent<ui::AutoLayoutRoot>();
     Sophie.addComponent<ui::UIComponent>(Sophie.id)
-        .set_desired_x(ui::Size{
+        .set_desired_width(ui::Size{
             // TODO figure out how to update this
             // when resolution changes
             .dim = ui::Dim::Pixels,
             .value = screenWidth,
         })
-        .set_desired_y(ui::Size{
+        .set_desired_height(ui::Size{
             .dim = ui::Dim::Pixels,
             .value = screenHeight,
         });
@@ -736,11 +750,11 @@ int main(void) {
   {
     auto &entity = EntityHelper::createEntity();
     entity.addComponent<ui::UIComponent>(entity.id)
-        .set_desired_x(ui::Size{
+        .set_desired_width(ui::Size{
             .dim = ui::Dim::Pixels,
             .value = button_size.x,
         })
-        .set_desired_y(ui::Size{
+        .set_desired_height(ui::Size{
             .dim = ui::Dim::Pixels,
             .value = button_size.y,
         })
@@ -752,11 +766,11 @@ int main(void) {
   {
     auto &entity = EntityHelper::createEntity();
     entity.addComponent<ui::UIComponent>(entity.id)
-        .set_desired_x(ui::Size{
+        .set_desired_width(ui::Size{
             .dim = ui::Dim::Pixels,
             .value = button_size.x,
         })
-        .set_desired_y(ui::Size{
+        .set_desired_height(ui::Size{
             .dim = ui::Dim::Percent,
             .value = 0.5f,
         })
