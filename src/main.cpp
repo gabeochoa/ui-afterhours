@@ -168,7 +168,8 @@ struct ProviderConsumer : public DataStorage {
     using type = decltype(std::declval<ProviderComponent>().fetch_data());
   };
 
-  ProviderConsumer() : DataStorage({{}}, get_data_from_provider, nullptr) {}
+  ProviderConsumer(const std::function<void(size_t)> &on_change)
+      : DataStorage({{}}, get_data_from_provider, on_change) {}
 
   virtual void write_value_change_to_provider(const DataStorage &storage) = 0;
   virtual ProvidedType convert_from_fetch(return_type::type data) const = 0;
@@ -202,7 +203,10 @@ struct HasDropdownStateWithProvider
                               HasDropdownState, HasDropdownState::Options,
                               ProviderComponent>;
 
-  HasDropdownStateWithProvider() : PC() {}
+  int max_num_options = -1;
+  HasDropdownStateWithProvider(const std::function<void(size_t)> &on_change,
+                               int max_options_ = -1)
+      : PC(on_change), max_num_options(max_options_) {}
 
   virtual HasDropdownState::Options
   convert_from_fetch(PC::return_type::type fetched_data) const override {
@@ -213,6 +217,8 @@ struct HasDropdownStateWithProvider
     // return a vector of items " "convertible to string");
     HasDropdownState::Options new_options;
     for (auto &data : fetched_data) {
+      if (max_num_options > 0 && (int)new_options.size() > max_num_options)
+        continue;
       new_options.push_back((std::string)data);
     }
     return new_options;
@@ -385,14 +391,14 @@ void make_dropdown(
                                               fn, on_change);
   dropdown.addComponent<ui::HasChildrenComponent>().register_on_child_add(
       [](Entity &child) {
-        log_info("register");
         if (child.is_missing<HasColor>()) {
           child.addComponent<HasColor>(raylib::PURPLE);
         }
       });
 }
 
-template <typename ProviderComponent> void make_dropdown(vec2 position) {
+template <typename ProviderComponent>
+void make_dropdown(Entity &parent, int max_options = -1) {
   using WRDS = ui::HasDropdownStateWithProvider<ProviderComponent>;
 
   /*
@@ -408,39 +414,35 @@ struct HasDropdownClickListener : HasClickListener {
 };
 
 */
-  const auto dropdown_click = [](Entity &entity) {
-    bool nv = !entity.get<WRDS>().on;
-
-    UIComponent &component = entity.get<UIComponent>();
-    for (auto id : entity.get<HasChildrenComponent>().children) {
-      auto opt_child = EQ().whereID(id).gen_first();
-      if (nv) {
-        component.add_child(id);
-      } else {
-        component.remove_child(id);
-      }
-    }
-
-    entity.get<WRDS>().on = nv;
-
-    if (!nv) {
-      WRDS &wrds = entity.get<WRDS>();
-      wrds.write_value_change_to_provider(wrds);
-    }
-  };
-
   auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<ui::UIComponent>(dropdown.id);
-  dropdown.addComponent<ui::Transform>(position, button_size);
-  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
-  dropdown.addComponent<WRDS>();
-  dropdown.addComponent<ui::HasLabel>();
-  dropdown.addComponent<ui::HasChildrenComponent>();
-  dropdown.addComponent<ui::HasClickListener>(dropdown_click);
+  dropdown.addComponent<UIComponent>(dropdown.id)
+      .set_desired_width(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x,
+      })
+      .set_desired_height(ui::Size{
+          .dim = ui::Dim::Children,
+          .value = button_size.y,
+      })
+      .set_parent(parent.id);
+  parent.get<ui::UIComponent>().add_child(dropdown.id);
 
-  log_info("has child {}", dropdown.has_child_of<HasDropdownState>());
-  log_info("get child {}",
-           type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
+  dropdown.addComponent<ui::HasColor>(raylib::BLUE);
+  dropdown.addComponent<ui::HasChildrenComponent>().register_on_child_add(
+      [](Entity &child) {
+        if (child.is_missing<HasColor>()) {
+          child.addComponent<HasColor>(raylib::PURPLE);
+        }
+      });
+
+  dropdown.addComponent<WRDS>(
+      [&dropdown](size_t) {
+        WRDS &wrds = dropdown.get<WRDS>();
+        if (!wrds.on) {
+          wrds.write_value_change_to_provider(wrds);
+        }
+      },
+      max_options);
 }
 
 struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
@@ -530,8 +532,7 @@ int main(void) {
     return std::vector<std::string>{{"default", "option1", "option2"}};
   });
 
-  // ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
-  // vec2{400, y});
+  ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(Sophie);
 
   SystemManager systems;
 
