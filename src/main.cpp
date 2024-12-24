@@ -16,9 +16,6 @@ backward::SignalHandling sh;
 #define AFTER_HOURS_DEBUG
 #define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
 #define AFTER_HOURS_REPLACE_LOGGING
-#define AFTER_HOURS_ENTITY_HELPER
-#define AFTER_HOURS_ENTITY_QUERY
-#define AFTER_HOURS_SYSTEM
 #include "afterhours/ah.h"
 #define AFTER_HOURS_USE_RAYLIB
 #include "afterhours/src/developer.h"
