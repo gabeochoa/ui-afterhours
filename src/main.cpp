@@ -55,7 +55,13 @@ struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
       const Entity &,
       const window_manager::ProvidesCurrentResolution &pCurrentResolution,
       float) const override {
-    raylib::DrawFPS((int)(pCurrentResolution.width() - 80), 0);
+    const window_manager::Resolution rez =
+        pCurrentResolution.current_resolution;
+
+    raylib::DrawFPS((int)(rez.width - 80), 0);
+    raylib::DrawText(fmt::format("{}x{}", rez.width, rez.height).c_str(),
+                     (int)(rez.width - 100), (int)80, (int)20,
+                     raylib::RAYWHITE);
   }
 };
 
