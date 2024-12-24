@@ -13,6 +13,7 @@ backward::SignalHandling sh;
 //
 #include "log/log.h"
 //
+#define AFTER_HOURS_DEBUG
 #define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
 #define AFTER_HOURS_REPLACE_LOGGING
 #define AFTER_HOURS_ENTITY_HELPER
@@ -281,8 +282,6 @@ struct HandleClicks : SystemWithUIContext<ui::HasClickListener> {
                              float) override {
     if (!context_entity)
       return;
-    if (entity.has<ShouldHide>())
-      return;
     UIContext<InputAction> &context =
         context_entity->get<UIContext<InputAction>>();
 
@@ -332,8 +331,6 @@ struct HandleTabbing : SystemWithUIContext<> {
   virtual void for_each_with(Entity &entity, UIComponent &, float) override {
     if (!context_entity)
       return;
-    if (entity.has<ShouldHide>())
-      return;
 
     UIContext<InputAction> &context =
         context_entity->get<UIContext<InputAction>>();
@@ -372,31 +369,45 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
 };
 
 struct UpdateDropdownOptions
-    : SystemWithUIContext<Transform, HasDropdownState, HasChildrenComponent> {
+    : SystemWithUIContext<HasDropdownState, HasChildrenComponent> {
 
   UpdateDropdownOptions()
-      : SystemWithUIContext<Transform, HasDropdownState,
-                            HasChildrenComponent>() {
+      : SystemWithUIContext<HasDropdownState, HasChildrenComponent>() {
     include_derived_children = true;
   }
 
-  void make_dropdown_child(Transform &transform, Entity &entity, size_t i,
-                           const std::string &option) {
-    auto &child = EntityHelper::createEntity();
-    entity.get<HasChildrenComponent>().add_child(child.id);
-    child.addComponent<UIComponent>(child.id);
-    child.addComponent<ui::Transform>(
-        transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
-        button_size);
-    child.addComponent<ui::HasColor>(raylib::PURPLE);
-    child.addComponent<ui::HasLabel>(option);
-    child.addComponent<ui::ShouldHide>();
+  void reuse_dropdown_child(UIComponent &component, Entity &entity, size_t i,
+                            const std::string &option) {
+    Entity &child =
+        EQ().whereID(entity.get<ui::HasChildrenComponent>().children[i])
+            .gen_first_enforce();
 
-    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
+    child.get<UIComponent>()
+        .set_desired_width(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = button_size.x,
+        })
+        .set_desired_height(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = button_size.y,
+        })
+        .set_parent(entity.id);
+
+    HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
+    if (hds.on || hds.last_option_clicked == i) {
+      entity.get<UIComponent>().add_child(child.id);
+    }
+
+    /*
+    child.get<ui::HasColor>(raylib::PURPLE);
+    child.get<ui::HasLabel>(option);
+    child.get<ui::HasClickListener>([i, &entity](Entity &) {
+      log_info("click child {}", i);
       ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
       if (hds.on_option_changed)
         hds.on_option_changed(i);
       hds.last_option_clicked = i;
+
       entity.get<ui::HasClickListener>().cb(entity);
 
       OptEntity opt_context =
@@ -405,10 +416,63 @@ struct UpdateDropdownOptions
 
       entity.get<HasLabel>().label = hds.options[hds.last_option_clicked];
     });
+    */
   }
 
-  virtual void for_each_with_derived(Entity &entity, UIComponent &,
-                                     Transform &transform,
+  void make_dropdown_child(UIComponent &component, Entity &entity, size_t i,
+                           const std::string &option) {
+    Entity &child = EntityHelper::createEntity();
+
+    child.addComponent<UIComponent>(child.id)
+        .set_desired_width(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = button_size.x,
+        })
+        .set_desired_height(ui::Size{
+            .dim = ui::Dim::Pixels,
+            .value = button_size.y,
+        })
+        .set_parent(entity.id);
+
+    entity.get<HasChildrenComponent>().add_child(child.id);
+
+    HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
+    if (hds.on || hds.last_option_clicked == i) {
+      entity.get<UIComponent>().add_child(child.id);
+    }
+    // child.addComponent<ui::Transform>(
+    // transform.position + vec2{0.f, button_size.y * ((float)i + 1.f)},
+    // button_size);
+    child.addComponent<ui::HasColor>(raylib::PURPLE);
+    child.addComponent<ui::HasLabel>(option);
+
+    child.addComponent<ui::HasClickListener>([i, &entity](Entity &) {
+      log_info("click child {}", i);
+      ui::HasDropdownState &hds = entity.get_with_child<HasDropdownState>();
+      if (hds.on_option_changed)
+        hds.on_option_changed(i);
+      hds.last_option_clicked = i;
+
+      {
+        bool nv = !hds.on;
+        UIComponent &component = entity.get<UIComponent>();
+        for (auto id : entity.get<HasChildrenComponent>().children) {
+          if (nv) {
+            component.add_child(id);
+          } else {
+            component.remove_child(id);
+          }
+        }
+        entity.get<ui::HasDropdownState>().on = nv;
+      }
+
+      OptEntity opt_context =
+          EQ().whereHasComponent<UIContext<InputAction>>().gen_first();
+      opt_context->get<ui::UIContext<InputAction>>().set_focus(entity.id);
+    });
+  }
+
+  virtual void for_each_with_derived(Entity &entity, UIComponent &component,
                                      HasDropdownState &hasDropdownState,
                                      HasChildrenComponent &hasChildren,
                                      float) override {
@@ -416,6 +480,7 @@ struct UpdateDropdownOptions
     // TODO maybe we should fetch only once a second or something?
     const auto options = hasDropdownState.fetch_options(hasDropdownState);
 
+    /*
     if (options.size() == hasDropdownState.options.size()) {
       bool any_changed = false;
       for (size_t i = 0; i < options.size(); i++) {
@@ -431,28 +496,32 @@ struct UpdateDropdownOptions
       if (!any_changed)
         return;
     }
+    */
     // update the children
 
     // delete existing
-    {
+    if (0) {
       for (auto &child_id : hasChildren.children) {
         EntityHelper::markIDForCleanup(child_id);
       }
       hasChildren.children.clear();
     }
+    component.children.clear();
 
     for (size_t i = 0; i < options.size(); i++) {
       auto &option = options[i];
-      make_dropdown_child(transform, entity, i, option);
+
+      if (hasChildren.children.size() > i) {
+        reuse_dropdown_child(component, entity, i, option);
+      } else {
+        make_dropdown_child(component, entity, i, option);
+      }
     }
 
     hasDropdownState.last_option_clicked =
         (size_t)std::max(std::min((int)options.size() - 1,
                                   (int)hasDropdownState.last_option_clicked),
                          0);
-    entity.get<HasLabel>().label =
-        options[hasDropdownState.last_option_clicked];
-
     hasDropdownState.options = options;
   }
 };
@@ -548,7 +617,7 @@ void make_slider(Entity &parent) {
     child_cmp.set_desired_width(
         ui::Size{.dim = ui::Dim::Percent, .value = value * 0.75f});
 
-    log_info("I clicked the slider {} {}", entity.id, value);
+    // log_info("I clicked the slider {} {}", entity.id, value);
   });
 
   // TODO replace when we have actual padding later
@@ -586,41 +655,27 @@ void make_slider(Entity &parent) {
 }
 
 void make_dropdown(
-    vec2 position,
+    Entity &parent, vec2 position,
     const std::function<ui::HasDropdownState::Options(HasDropdownState &)> &fn,
     const std::function<void(size_t)> &on_change = nullptr) {
+
   auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<UIComponent>(dropdown.id);
-  dropdown.addComponent<ui::Transform>(position, button_size);
+  dropdown.addComponent<UIComponent>(dropdown.id)
+      .set_desired_width(ui::Size{
+          .dim = ui::Dim::Pixels,
+          .value = button_size.x,
+      })
+      .set_desired_height(ui::Size{
+          .dim = ui::Dim::Children,
+          .value = button_size.y,
+      })
+      .set_parent(parent.id);
+  parent.get<ui::UIComponent>().add_child(dropdown.id);
+
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
   dropdown.addComponent<ui::HasDropdownState>(ui::HasDropdownState::Options{},
                                               fn, on_change);
-  dropdown.addComponent<ui::HasLabel>();
   dropdown.addComponent<ui::HasChildrenComponent>();
-  dropdown.addComponent<ui::HasClickListener>([](Entity &entity) {
-    bool nv = !entity.get<ui::HasDropdownState>().on;
-    log_info("dropdown {}", nv);
-
-    for (auto id : entity.get<HasChildrenComponent>().children) {
-      auto opt_child = EQ().whereID(id).gen_first();
-      if (nv) {
-        opt_child->removeComponent<ShouldHide>();
-      } else {
-        opt_child->addComponent<ShouldHide>();
-      }
-    }
-
-    entity.get<ui::HasDropdownState>().on = nv;
-  });
-}
-
-void make_div() {
-  auto &div = EntityHelper::createEntity();
-  div.addComponent<ui::UIComponent>(div.id)
-      .set_desired_width(Size{.dim = Dim::Children})
-      .set_desired_height(Size{.dim = Dim::Children});
-  div.addComponent<ui::HasColor>(raylib::BLUE);
-  div.addComponent<ui::HasChildrenComponent>();
 }
 
 template <typename ProviderComponent> void make_dropdown(vec2 position) {
@@ -642,12 +697,13 @@ struct HasDropdownClickListener : HasClickListener {
   const auto dropdown_click = [](Entity &entity) {
     bool nv = !entity.get<WRDS>().on;
 
+    UIComponent &component = entity.get<UIComponent>();
     for (auto id : entity.get<HasChildrenComponent>().children) {
       auto opt_child = EQ().whereID(id).gen_first();
       if (nv) {
-        opt_child->removeComponent<ShouldHide>();
+        component.add_child(id);
       } else {
-        opt_child->addComponent<ShouldHide>();
+        component.remove_child(id);
       }
     }
 
@@ -660,7 +716,7 @@ struct HasDropdownClickListener : HasClickListener {
   };
 
   auto &dropdown = EntityHelper::createEntity();
-  dropdown.addComponent<ui::UIComponent>();
+  dropdown.addComponent<ui::UIComponent>(dropdown.id);
   dropdown.addComponent<ui::Transform>(position, button_size);
   dropdown.addComponent<ui::HasColor>(raylib::BLUE);
   dropdown.addComponent<WRDS>();
@@ -779,18 +835,18 @@ int main(void) {
     Sophie.get<ui::UIComponent>().add_child(entity.id);
   }
 
-  // float y = 200;
-  // float o = 0;
-  // float s = 75;
+  float y = 200;
+  float o = 0;
+  float s = 75;
   // ui::make_button(Sophie);
   // ui::make_checkbox(Sophie);
-  ui::make_slider(Sophie);
+  // ui::make_slider(Sophie);
 
-  // ui::make_dropdown(vec2{200, y + (o++ * s)}, [](auto &) {
-  // return std::vector<std::string>{{"default", "option1", "option2"}};
-  // });
-  // ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
-  // vec2{400, y});
+  ui::make_dropdown(Sophie, vec2{200, y + (o++ * s)}, [](auto &) {
+    return std::vector<std::string>{{"default", "option1", "option2"}};
+  });
+  ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
+      vec2{400, y});
 
   afterhours::ui::AutoLayout::autolayout(Sophie.get<ui::UIComponent>());
   afterhours::ui::AutoLayout::print_tree(Sophie.get<ui::UIComponent>());
@@ -812,12 +868,12 @@ int main(void) {
   systems.register_update_system(
       std::make_unique<ui::BeginUIContextManager<InputAction>>());
   {
-    systems.register_update_system(std::make_unique<ui::HandleTabbing>());
-    systems.register_update_system(std::make_unique<ui::HandleClicks>());
-    systems.register_update_system(std::make_unique<ui::HandleDrags>());
     systems.register_update_system(
         std::make_unique<ui::UpdateDropdownOptions>());
     systems.register_update_system(std::make_unique<ui::RunAutoLayout>());
+    systems.register_update_system(std::make_unique<ui::HandleTabbing>());
+    systems.register_update_system(std::make_unique<ui::HandleClicks>());
+    systems.register_update_system(std::make_unique<ui::HandleDrags>());
   }
   systems.register_update_system(
       std::make_unique<ui::EndUIContextManager<InputAction>>());
