@@ -260,47 +260,7 @@ struct HasDropdownStateWithProvider
   }
 };
 
-// TODO i like this but for Tags, i wish
-// the user of this didnt have to add UIComponent to their for_each_with
-template <typename... Components>
-struct SystemWithUIContext : System<UIComponent, Components...> {
-  Entity *context_entity;
-  virtual void once(float) override {
-    OptEntity opt_context =
-        EQ()                                                 //
-            .whereHasComponent<ui::UIContext<InputAction>>() //
-            .gen_first();
-    context_entity = opt_context.value();
-  }
-};
-
-struct HandleClicks : SystemWithUIContext<ui::HasClickListener> {
-  virtual ~HandleClicks() {}
-
-  virtual void for_each_with(Entity &entity, UIComponent &component,
-                             HasClickListener &hasClickListener,
-                             float) override {
-    if (!context_entity)
-      return;
-    UIContext<InputAction> &context =
-        context_entity->get<UIContext<InputAction>>();
-
-    context.active_if_mouse_inside(entity.id, component.rect());
-
-    if (context.has_focus(entity.id) &&
-        context.pressed(InputAction::WidgetPress)) {
-      context.set_focus(entity.id);
-      hasClickListener.cb(entity);
-    }
-
-    if (context.is_mouse_click(entity.id)) {
-      context.set_focus(entity.id);
-      hasClickListener.cb(entity);
-    }
-  }
-};
-
-struct HandleDrags : SystemWithUIContext<ui::HasDragListener> {
+struct HandleDrags : SystemWithUIContext<InputAction, ui::HasDragListener> {
   virtual ~HandleDrags() {}
 
   virtual void for_each_with(Entity &entity, UIComponent &component,
@@ -325,7 +285,7 @@ struct HandleDrags : SystemWithUIContext<ui::HasDragListener> {
   }
 };
 
-struct HandleTabbing : SystemWithUIContext<> {
+struct HandleTabbing : SystemWithUIContext<InputAction> {
   virtual ~HandleTabbing() {}
 
   virtual void for_each_with(Entity &entity, UIComponent &, float) override {
@@ -339,7 +299,8 @@ struct HandleTabbing : SystemWithUIContext<> {
   }
 };
 
-struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
+struct RenderUIComponents
+    : SystemWithUIContext<InputAction, Transform, HasColor> {
   virtual ~RenderUIComponents() {}
   virtual void for_each_with(const Entity &entity, const UIComponent &,
                              const Transform &transform,
@@ -369,10 +330,11 @@ struct RenderUIComponents : SystemWithUIContext<Transform, HasColor> {
 };
 
 struct UpdateDropdownOptions
-    : SystemWithUIContext<HasDropdownState, HasChildrenComponent> {
+    : SystemWithUIContext<InputAction, HasDropdownState, HasChildrenComponent> {
 
   UpdateDropdownOptions()
-      : SystemWithUIContext<HasDropdownState, HasChildrenComponent>() {
+      : SystemWithUIContext<InputAction, HasDropdownState,
+                            HasChildrenComponent>() {
     include_derived_children = true;
   }
 
@@ -680,7 +642,8 @@ struct HasDropdownClickListener : HasClickListener {
            type_name<decltype(dropdown.get_with_child<HasDropdownState>())>());
 }
 
-struct RenderAutoLayoutRoots : SystemWithUIContext<AutoLayoutRoot> {
+struct RenderAutoLayoutRoots
+    : SystemWithUIContext<InputAction, AutoLayoutRoot> {
 
   void render_me(const Entity &entity) const {
     const UIComponent &cmp = entity.get<UIComponent>();
@@ -823,7 +786,8 @@ int main(void) {
         std::make_unique<ui::UpdateDropdownOptions>());
     systems.register_update_system(std::make_unique<ui::RunAutoLayout>());
     systems.register_update_system(std::make_unique<ui::HandleTabbing>());
-    systems.register_update_system(std::make_unique<ui::HandleClicks>());
+    systems.register_update_system(
+        std::make_unique<ui::HandleClicks<InputAction>>());
     systems.register_update_system(std::make_unique<ui::HandleDrags>());
   }
   systems.register_update_system(
