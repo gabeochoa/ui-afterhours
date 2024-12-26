@@ -172,7 +172,21 @@ int main(void) {
         });
   }
 
-  ui::make_slider(Sophie, button_size);
+  using afterhours::ui::pixels;
+  using afterhours::ui::children_xy;
+
+  auto& div = ui::make_div(Sophie, children_xy());
+  ui::make_button(div, "a", button_size);
+  ui::make_button(div, "b", button_size, nullptr, ui::Padding{
+          pixels(10),
+          pixels(10),
+          pixels(10),
+          pixels(10),
+          });
+  ui::make_button(div, "c", button_size);
+  ui::make_button(div, "d", button_size);
+
+  ui::force_layout_and_print(Sophie);
 
   SystemManager systems;
 
