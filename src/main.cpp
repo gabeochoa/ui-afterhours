@@ -1,5 +1,3 @@
-
-
 #include "backward/backward.hpp"
 
 namespace backward {
@@ -11,15 +9,31 @@ backward::SignalHandling sh;
 #include "std_include.h"
 #include <cassert>
 //
-#include "log/log.h"
+// Use the wrapper log.h file that properly sets up the logging system
+#include "log.h"
+
+// Workaround for missing log_once_per function - must be defined before
+// afterhours includes
+#ifndef AFTER_HOURS_REPLACE_LOGGING
+inline void log_once_per(...) {
+  // Empty implementation to satisfy the linker
+}
+#endif
+
 //
 #define AFTER_HOURS_DEBUG
 #define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
 #define AFTER_HOURS_REPLACE_LOGGING
-#include "afterhours/ah.h"
+#include <afterhours/ah.h>
 #define AFTER_HOURS_USE_RAYLIB
 #include "afterhours/src/developer.h"
+#include "afterhours/src/font_helper.h"
+#include "afterhours/src/plugins/autolayout.h"
+#include "afterhours/src/plugins/color.h"
 #include "afterhours/src/plugins/input_system.h"
+#include "afterhours/src/plugins/texture_manager.h"
+#include "afterhours/src/plugins/ui.h"
+#include "afterhours/src/plugins/ui/immediate.h"
 #include "afterhours/src/plugins/window_manager.h"
 
 //
@@ -34,9 +48,7 @@ constexpr float distance_sq(const vec2 a, const vec2 b) {
 }
 
 #define RectangleType raylib::Rectangle
-#define Vector2Type vec2
-#include "afterhours/src/plugins/autolayout.h"
-#include "afterhours/src/plugins/ui.h"
+// Remove the Vector2Type redefinition since it's already defined in rl.h
 
 namespace myutil {
 
@@ -47,7 +59,7 @@ template <class... Ts> struct overloaded : Ts... {
 template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
 } // namespace myutil
 
-struct EQ : public EntityQuery<EQ> {};
+struct EQ : public afterhours::EntityQuery<EQ> {};
 
 struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
   virtual ~RenderFPS() {}
@@ -65,11 +77,10 @@ struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
   }
 };
 
-const vec2 button_size = vec2{100, 50};
-
 enum class InputAction {
   None,
   WidgetNext,
+  WidgetBack, // Add the missing WidgetBack enum value
   WidgetMod,
   WidgetPress,
   ValueDown,
@@ -82,6 +93,10 @@ auto get_mapping() {
   std::map<InputAction, input::ValidInputs> mapping;
   mapping[InputAction::WidgetNext] = {
       raylib::KEY_TAB,
+  };
+
+  mapping[InputAction::WidgetBack] = {
+      raylib::KEY_TAB, // Use TAB for both next and back with shift modifier
   };
 
   mapping[InputAction::WidgetPress] = {
@@ -100,93 +115,70 @@ auto get_mapping() {
   return mapping;
 }
 
-namespace afterhours {
-namespace ui {
+struct SetupUIStylingDefaults : System<afterhours::ui::UIContext<InputAction>> {
+  bool setup_done = false;
 
-struct Transform : BaseComponent {
-  vec2 position;
-  vec2 size;
-  Transform(vec2 pos, vec2 sz) : position(pos), size(sz) {}
+  virtual void for_each_with(Entity &entity,
+                             afterhours::ui::UIContext<InputAction> &context,
+                             float) override {
+    (void)entity;  // Mark as unused
+    (void)context; // Mark as unused
+    if (!setup_done) {
+      using namespace afterhours::ui;
+      using namespace afterhours::ui::imm;
 
-  raylib::Rectangle rect() const {
-    return raylib::Rectangle{position.x, position.y, size.x, size.y};
-  }
+      // Set up basic UI styling defaults
+      auto &styling_defaults = UIStylingDefaults::get();
+      (void)styling_defaults; // Mark as unused
+      auto default_size = ComponentSize{pixels(200.f), pixels(50.f)};
 
-  raylib::Rectangle focus_rect(int rw = 2) const {
-    return raylib::Rectangle{position.x - (float)rw, position.y - (float)rw,
-                             size.x + (2.f * (float)rw),
-                             size.y + (2.f * (float)rw)};
+      fmt::print("SetupUIStylingDefaults: Setting up UI styling defaults\n");
+      setup_done = true;
+    }
   }
 };
 
-} // namespace ui
-} // namespace afterhours
+struct SimpleUISystem : System<afterhours::ui::UIContext<InputAction>> {
+  bool ui_created = false;
+
+  virtual void for_each_with(Entity &entity,
+                             afterhours::ui::UIContext<InputAction> &context,
+                             float) override {
+    using namespace afterhours::ui;
+    using namespace afterhours::ui::imm;
+
+    div(context, mk(entity),
+        ComponentConfig().with_label("Hello from Afterhours!"));
+    fmt::print("SimpleUISystem: UI context accessible, entity ID: {}\n",
+               entity.id);
+    fmt::print("SimpleUISystem: Entity has AutoLayoutRoot: {}\n",
+               entity.has<ui::AutoLayoutRoot>());
+  }
+};
 
 int main(void) {
   const int screenWidth = 1280;
   const int screenHeight = 720;
 
-  raylib::InitWindow(screenWidth, screenHeight, "ui-afterhours");
+  raylib::InitWindow(screenWidth, screenHeight,
+                     "UI Afterhours - Component Showcase");
   raylib::SetTargetFPS(200);
 
-  // sophie
+  // Create main entity
   auto &Sophie = EntityHelper::createEntity();
   {
     input::add_singleton_components<InputAction>(Sophie, get_mapping());
     window_manager::add_singleton_components(Sophie, 200);
-    Sophie.addComponent<ui::UIContext<InputAction>>();
+    ui::add_singleton_components<InputAction>(Sophie);
 
-    // making a root component to attach the UI to
+    // Add AutoLayoutRoot component - required for UI elements
     Sophie.addComponent<ui::AutoLayoutRoot>();
-    Sophie.addComponent<ui::UIComponent>(Sophie.id)
-        .set_desired_width(ui::Size{
-            // TODO figure out how to update this
-            // when resolution changes
-            .dim = ui::Dim::Pixels,
-            .value = screenWidth,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = screenHeight,
-        });
+    // Root UIComponent so children have a valid parent
+    Sophie.addComponent<ui::UIComponent>(Sophie.id);
+    Sophie.addComponent<ui::UIComponentDebug>("root");
+    // Ensure newly added components are available this frame
+    EntityHelper::merge_entity_arrays();
   }
-
-  {
-    auto &dropdown =
-        ui::make_dropdown<window_manager::ProvidesAvailableWindowResolutions>(
-            Sophie);
-    dropdown.get<ui::UIComponent>()
-        .set_desired_width(ui::Size{
-            .dim = ui::Dim::Pixels,
-            .value = button_size.x,
-        })
-        .set_desired_height(ui::Size{
-            .dim = ui::Dim::Children,
-            .value = button_size.y,
-        });
-    dropdown.get<ui::HasChildrenComponent>().register_on_child_add(
-        [](Entity &child) {
-          if (child.is_missing<ui::HasColor>()) {
-            child.addComponent<ui::HasColor>(raylib::PURPLE);
-          }
-        });
-  }
-
-  using afterhours::ui::pixels;
-  using afterhours::ui::children_xy;
-
-  auto& div = ui::make_div(Sophie, children_xy());
-  ui::make_button(div, "a", button_size);
-  ui::make_button(div, "b", button_size, nullptr, ui::Padding{
-          pixels(10),
-          pixels(10),
-          pixels(10),
-          pixels(10),
-          });
-  ui::make_button(div, "c", button_size);
-  ui::make_button(div, "d", button_size);
-
-  ui::force_layout_and_print(Sophie);
 
   SystemManager systems;
 
@@ -200,7 +192,18 @@ int main(void) {
   {
     input::register_update_systems<InputAction>(systems);
     window_manager::register_update_systems(systems);
-    ui::register_update_systems<InputAction>(systems);
+  }
+
+  // UI systems - add them back but with proper singleton handling
+  {
+    ui::register_before_ui_updates<InputAction>(systems);
+    {
+      // Register our UI system between before and after UI updates
+      systems.register_update_system(
+          std::make_unique<SetupUIStylingDefaults>());
+      systems.register_update_system(std::make_unique<SimpleUISystem>());
+    }
+    ui::register_after_ui_updates<InputAction>(systems);
   }
 
   // renders
