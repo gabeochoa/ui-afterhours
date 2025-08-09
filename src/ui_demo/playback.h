@@ -16,6 +16,7 @@ struct PlaybackConfig {
   std::vector<PlaybackStep> steps;
   bool auto_quit = false;
   std::string dump_path = "ui_tree.json";
+  // Per-run delay is configured via CLI, not TOML, to keep tests deterministic
 };
 
 extern std::optional<PlaybackConfig> g_playback_config;

@@ -6,7 +6,7 @@ remove the item from the list
 commit the item 
 repeat
 
-- add delay so that a viewer can see whats going on 
+- add delay so that a viewer can see whats going on (implemented via CLI: `--delay=<ms>`, default 0)
 - add support for headless mode 
 - use nlohman for json 
 - come up with a strategy for us to label tests exhaustively (like an enum for HasLabel, Colors to test, disabled/nondisabled) this will give us a way to make sure we have one test for each variant. 

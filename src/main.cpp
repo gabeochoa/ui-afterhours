@@ -81,6 +81,8 @@ using afterhours::input;
 
 std::optional<PlaybackConfig> g_playback_config;
 std::atomic<bool> g_should_quit{false};
+// Optional CLI-configured delay between playback steps (in seconds)
+float g_step_delay_seconds = 0.0f;
 
 static std::string trim(const std::string &s) {
   size_t a = s.find_first_not_of(" \t\r\n");
@@ -148,6 +150,7 @@ load_actions_toml(const std::string &path) {
       cfg.auto_quit = *aq;
     if (auto dp = tbl["dump_path"].value<std::string>())
       cfg.dump_path = *dp;
+    // Note: delay is controlled by CLI, not TOML, to keep tests deterministic
 
     if (auto arr = tbl["step"].as_array()) {
       for (toml::node &node : *arr) {
@@ -231,9 +234,9 @@ struct SimpleUISystem : System<afterhours::ui::UIContext<InputAction>> {
 struct ActionPlaybackSystem : System<> {
   size_t current_step = 0;
   bool done = false;
+  float wait_timer = 0.0f;
 
   virtual void for_each_with(Entity &, float dt) override {
-    (void)dt;
     if (!g_playback_config.has_value() || done)
       return;
     auto pic = input::get_input_collector<InputAction>();
@@ -243,6 +246,11 @@ struct ActionPlaybackSystem : System<> {
 
     const PlaybackConfig &cfg = g_playback_config.value();
     if (current_step < cfg.steps.size()) {
+      // If a delay is configured (via CLI), count down before next step
+      if (g_step_delay_seconds > 0.0f && wait_timer > 0.0f) {
+        wait_timer -= dt;
+        return;
+      }
       const PlaybackStep &step = cfg.steps[current_step];
       for (auto a : step.held) {
         pic.inputs().push_back(afterhours::input::ActionDone<InputAction>{
@@ -262,6 +270,10 @@ struct ActionPlaybackSystem : System<> {
                 .length_pressed = dt});
       }
       current_step++;
+      // Reset delay timer after applying a step
+      if (g_step_delay_seconds > 0.0f) {
+        wait_timer = g_step_delay_seconds;
+      }
     } else {
       done = true;
       // Dump UI tree if requested and request quit
@@ -300,6 +312,7 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     const std::string prefix = "--actions=";
+    const std::string delay_ms_prefix = "--delay=";
     if (arg.rfind(prefix, 0) == 0) {
       std::string path = arg.substr(prefix.size());
       auto cfg = load_actions_toml(path);
@@ -307,6 +320,16 @@ int main(int argc, char **argv) {
         g_playback_config = cfg;
       } else {
         log_error("Failed to load actions file: {}", path);
+      }
+    } else if (arg.rfind(delay_ms_prefix, 0) == 0) {
+      const std::string v = arg.substr(delay_ms_prefix.size());
+      try {
+        int ms = std::stoi(v);
+        if (ms < 0)
+          ms = 0;
+        g_step_delay_seconds = static_cast<float>(ms) / 1000.0f;
+      } catch (...) {
+        log_warn("Invalid --delay value: '{}', ignoring", v);
       }
     }
   }
