@@ -2,7 +2,7 @@
 
 This is a big, categorized backlog of ideas to build out the example app and comprehensively demo the Afterhours UI plugin and related systems. Use it as a menu; check off in any order.
 
-- add support for command line arguments to navigate the UI so we can automate checking this is working 
+- command line argument to not have any actual window, and just pretend 
 
 ### What’s already shown in `src/main.cpp`
 - [x] Basic ECS bootstrapping, window, systems wiring
