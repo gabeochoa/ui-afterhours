@@ -16,7 +16,7 @@ LIBS = -L. -Lvendor/ $(RAYLIB_LIB)
 SRC_FILES := $(wildcard src/*.cpp src/**/*.cpp)
 H_FILES := $(wildcard src/**/*.h src/**/*.hpp)
 OBJ_DIR := ./output
-OBJ_FILES := $(SRC_FILES:%.cpp=$(OBJ_DIR)/%.o)
+OBJ_FILES := $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
 DEPENDS := $(patsubst %.cpp,%.d,$(SOURCES))
 -include $(DEPENDS)
@@ -32,8 +32,12 @@ CXX := clang++
 
 all: build
 
-build:
-	$(CXX) $(FLAGS) $(NOFLAGS) $(INCLUDES) $(LIBS) src/main.cpp -o $(OUTPUT_EXE) && say compile done
+build: $(OBJ_FILES)
+	$(CXX) $(FLAGS) $(NOFLAGS) $(INCLUDES) $(LIBS) $(OBJ_FILES) -o $(OUTPUT_EXE) && say compile done
+
+$(OBJ_DIR)/%.o: %.cpp $(H_FILES)
+	@mkdir -p $(dir $@)
+	$(CXX) $(FLAGS) $(NOFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
 run: 
 	./$(OUTPUT_EXE)

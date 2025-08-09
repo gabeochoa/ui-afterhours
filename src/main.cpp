@@ -13,8 +13,12 @@ backward::SignalHandling sh;
 #include "argh.h"
 #include "log.h"
 #include "magic_enum/magic_enum.hpp"
-#include "nlohmann/json.hpp"
 #include "toml.hpp"
+#include "ui_demo/dump.h"
+#include "ui_demo/input_mapping.h"
+#include "ui_demo/playback.h"
+#include "ui_demo/router.h"
+#include "ui_demo/styling.h"
 
 // Workaround for missing log_once_per function - must be defined before
 // afterhours includes
@@ -25,11 +29,12 @@ inline void log_once_per(...) {
 #endif
 
 //
-#define AFTER_HOURS_DEBUG
-#define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
-#define AFTER_HOURS_REPLACE_LOGGING
-#include <afterhours/ah.h>
-#define AFTER_HOURS_USE_RAYLIB
+// These are already set and included by rl.h; avoid redefining them here
+//#define AFTER_HOURS_DEBUG
+//#define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
+//#define AFTER_HOURS_REPLACE_LOGGING
+//#include <afterhours/ah.h>
+//#define AFTER_HOURS_USE_RAYLIB
 #include "afterhours/src/developer.h"
 #include "afterhours/src/font_helper.h"
 #include "afterhours/src/plugins/autolayout.h"
@@ -43,16 +48,7 @@ inline void log_once_per(...) {
 //
 using namespace afterhours;
 
-typedef raylib::Vector2 vec2;
-typedef raylib::Vector3 vec3;
-typedef raylib::Vector4 vec4;
-
-constexpr float distance_sq(const vec2 a, const vec2 b) {
-  return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
-}
-
-#define RectangleType raylib::Rectangle
-// Remove the Vector2Type redefinition since it's already defined in rl.h
+// Use types from rl.h (raylib::Vector2/3/4 already typedef'd there if needed)
 
 namespace myutil {
 
@@ -81,41 +77,10 @@ struct RenderFPS : System<window_manager::ProvidesCurrentResolution> {
   }
 };
 
-enum class InputAction {
-  None,
-  WidgetNext,
-  WidgetBack, // Add the missing WidgetBack enum value
-  WidgetMod,
-  WidgetPress,
-  ValueDown,
-  ValueUp,
-};
-
 using afterhours::input;
 
-// Demo state stored on the root entity to hold current page selection, etc.
-struct DemoState : public BaseComponent {
-  size_t current_page_index = 0;
-};
-struct ExampleState : public BaseComponent {
-  bool showing = false;
-  size_t screen_index = 0;
-};
-
-// Minimal test action playback support driven by a simple TOML file
-struct PlaybackStep {
-  std::vector<InputAction> pressed;
-  std::vector<InputAction> held;
-};
-
-struct PlaybackConfig {
-  std::vector<PlaybackStep> steps;
-  bool auto_quit = false;
-  std::string dump_path = "ui_tree.json";
-};
-
-static std::optional<PlaybackConfig> g_playback_config;
-static std::atomic<bool> g_should_quit{false};
+std::optional<PlaybackConfig> g_playback_config;
+std::atomic<bool> g_should_quit{false};
 
 static std::string trim(const std::string &s) {
   size_t a = s.find_first_not_of(" \t\r\n");
@@ -223,102 +188,11 @@ load_actions_toml(const std::string &path) {
   }
 }
 
-static void dump_ui_tree_json(const std::string &path) {
-  using namespace afterhours::ui;
-  // Find the entity that owns the AutoLayoutRoot (the UI tree root)
-  Entity &root_ent =
-      EntityQuery().whereHasComponent<AutoLayoutRoot>().gen_first_enforce();
-  std::function<void(EntityID, std::stringstream &, int)> rec;
-  rec = [&](EntityID id, std::stringstream &ss, int depth) {
-    auto opt = EntityHelper::getEntityForID(id);
-    if (!opt) {
-      ss << "{\"id\":" << id
-         << ",\"name\":\"missing\",\"rect\":{\"x\":0,\"y\":0,\"w\":0,\"h\":0},"
-            "\"children\":[]}";
-      return;
-    }
-    Entity &e = opt.asE();
-    if (!e.has<UIComponent>()) {
-      ss << "{\"id\":" << id
-         << ",\"name\":\"no_uicmp\",\"rect\":{\"x\":0,\"y\":0,\"w\":0,\"h\":0},"
-            "\"children\":[]}";
-      return;
-    }
-    UIComponent &cmp = e.get<UIComponent>();
-    RectangleType r = cmp.rect();
-    std::string name = e.has<UIComponentDebug>()
-                           ? e.get<UIComponentDebug>().name()
-                           : std::string("unknown");
-    ss << "{\"id\":" << id << ",\"name\":\"" << name << "\",";
-    ss << "\"rect\":{\"x\":" << r.x << ",\"y\":" << r.y << ",\"w\":" << r.width
-       << ",\"h\":" << r.height << "},";
-    ss << "\"children\":[";
-    for (size_t i = 0; i < cmp.children.size(); ++i) {
-      rec(cmp.children[i], ss, depth + 1);
-      if (i + 1 < cmp.children.size())
-        ss << ",";
-    }
-    ss << "]}";
-  };
+// dump_ui_tree_json moved to ui_demo/dump.h
 
-  std::stringstream ss;
-  ss << "{";
-  ss << "\"root\":";
-  rec(root_ent.id, ss, 0);
-  ss << "}";
-  std::ofstream out(path);
-  if (out)
-    out << ss.str();
-}
+// get_mapping moved to ui_demo/input_mapping.h
 
-auto get_mapping() {
-  std::map<InputAction, input::ValidInputs> mapping;
-  mapping[InputAction::WidgetNext] = {
-      raylib::KEY_TAB,
-  };
-
-  mapping[InputAction::WidgetBack] = {
-      raylib::KEY_TAB, // Use TAB for both next and back with shift modifier
-  };
-
-  mapping[InputAction::WidgetPress] = {
-      raylib::KEY_ENTER,
-  };
-
-  mapping[InputAction::ValueUp] = {
-      raylib::KEY_UP,
-  };
-  mapping[InputAction::ValueDown] = {
-      raylib::KEY_DOWN,
-  };
-  mapping[InputAction::WidgetMod] = {
-      raylib::KEY_LEFT_SHIFT,
-  };
-  return mapping;
-}
-
-struct SetupUIStylingDefaults : System<afterhours::ui::UIContext<InputAction>> {
-  bool setup_done = false;
-
-  virtual void for_each_with(Entity &entity,
-                             afterhours::ui::UIContext<InputAction> &context,
-                             float) override {
-    (void)entity;  // Mark as unused
-    (void)context; // Mark as unused
-    if (!setup_done) {
-      using namespace afterhours::ui;
-      using namespace afterhours::ui::imm;
-
-      // Set up basic UI styling defaults
-      auto &styling_defaults = UIStylingDefaults::get();
-      (void)styling_defaults; // Mark as unused
-      auto default_size = ComponentSize{pixels(200.f), pixels(50.f)};
-
-      fmt::print("SetupUIStylingDefaults: Setting up UI styling defaults\n");
-      setup_done = true;
-    }
-  }
-};
+// Duplicated in src/ui_demo/styling.h
 
 struct SimpleUISystem : System<afterhours::ui::UIContext<InputAction>> {
   bool ui_created = false;
@@ -351,269 +225,7 @@ struct SimpleUISystem : System<afterhours::ui::UIContext<InputAction>> {
   }
 };
 
-// Router system: renders a navigation bar and routes to the active demo page
-struct DemoRouter : System<afterhours::ui::UIContext<InputAction>> {
-  using UIX = afterhours::ui::UIContext<InputAction>;
-
-  virtual void for_each_with(Entity &entity, UIX &context, float) override {
-    using namespace afterhours::ui;
-    using namespace afterhours::ui::imm;
-
-    // Ensure demo state exists
-    DemoState &state = entity.addComponentIfMissing<DemoState>();
-    ExampleState &examples = entity.addComponentIfMissing<ExampleState>();
-
-    // Page registry
-    static const std::vector<std::string> page_names = {
-        "Home",
-        "Buttons",
-        "Layout",
-    };
-
-    // Root container for all demo UI
-    auto root = div(context, mk(entity, 1000),
-                    ComponentConfig()
-                        .with_size(ComponentSize{pixels(1100.f), pixels(650.f)})
-                        .with_flex_direction(FlexDirection::Column)
-                        .with_debug_name("demo_root"));
-
-    // Top navigation bar
-    size_t nav_index = state.current_page_index;
-    auto nav_el = navigation_bar(
-        context, mk(root.ent(), 0), page_names, nav_index,
-        ComponentConfig()
-            .with_size(ComponentSize{percent(1.f), pixels(50.f)})
-            .with_flex_direction(FlexDirection::Row)
-            .with_hidden(entity.addComponentIfMissing<ExampleState>().showing)
-            .with_debug_name("nav_bar"));
-    state.current_page_index = nav_index;
-    if (context.has_focus(context.ROOT)) {
-      // Focus first child of nav bar so simulated tab/press works
-      // deterministically
-      auto &cmp = nav_el.ent().get<ui::UIComponent>();
-      if (!cmp.children.empty())
-        context.set_focus(cmp.children[0]);
-    }
-
-    // Main content area
-    auto content = div(
-        context, mk(root.ent(), 1),
-        ComponentConfig()
-            .with_size(ComponentSize{percent(1.f), children()})
-            .with_flex_direction(FlexDirection::Column)
-            .with_hidden(entity.addComponentIfMissing<ExampleState>().showing)
-            .with_debug_name("content"));
-
-    // Render active page
-    switch (state.current_page_index) {
-    case 0: {
-      // Home page: intro + compact gallery
-      div(context, mk(content.ent(), 0),
-          ComponentConfig()
-              .with_label(
-                  "Afterhours UI Demo: Use the nav bar to switch pages.")
-              .with_size(ComponentSize{children(), pixels(50.f)})
-              .with_skip_tabbing(true)
-              .with_debug_name("home_intro"));
-
-      // Button to open deterministic example overlay
-      if (button(context, mk(content.ent(), 1),
-                 ComponentConfig()
-                     .with_label("Open Examples")
-                     .with_size(ComponentSize{pixels(220.f), pixels(50.f)})
-                     .with_select_on_focus(true)
-                     .with_debug_name("open_examples"))) {
-        examples.showing = true;
-      }
-
-      auto gallery = div(context, mk(content.ent(), 2),
-                         ComponentConfig()
-                             .with_size(ComponentSize{percent(1.f), children()})
-                             .with_flex_direction(FlexDirection::Row)
-                             .with_debug_name("home_gallery"));
-
-      // Mini-gallery widgets
-      static bool home_checkbox = false;
-      static float home_slider = 0.25f;
-      static size_t home_dd = 0;
-      const std::vector<std::string> dd_opts = {"Red", "Green", "Blue"};
-
-      button(context, mk(gallery.ent(), 0),
-             ComponentConfig().with_label("Button"));
-      checkbox(context, mk(gallery.ent(), 1), home_checkbox,
-               ComponentConfig().with_label("Checkbox"));
-      slider(context, mk(gallery.ent(), 2), home_slider,
-             ComponentConfig().with_label("Slider"));
-      dropdown(context, mk(gallery.ent(), 3), dd_opts, home_dd,
-               ComponentConfig().with_label("Dropdown"));
-
-      // In playback mode, force examples overlay to ensure deterministic tree
-      if (g_playback_config.has_value()) {
-        examples.showing = true;
-      }
-
-      // Deterministic example overlay (modal)
-      if (examples.showing) {
-        // Full-screen overlay on top
-        auto overlay =
-            div(context, mk(root.ent(), 1001),
-                ComponentConfig()
-                    .with_size(ComponentSize{pixels(1100.f), pixels(650.f)})
-                    .with_absolute_position()
-                    .with_render_layer(100)
-                    .with_color_usage(afterhours::ui::Theme::Usage::Background)
-                    .with_debug_name("examples_overlay"));
-
-        // Inner panel
-        auto panel = div(
-            context, mk(overlay.ent(), 0),
-            ComponentConfig()
-                .with_size(ComponentSize{pixels(1000.f), pixels(600.f)})
-                .with_margin(Margin{.top = pixels(25.f), .left = pixels(50.f)})
-                .with_color_usage(afterhours::ui::Theme::Usage::Secondary)
-                .with_debug_name("examples_panel"));
-
-        div(context, mk(panel.ent(), 0),
-            ComponentConfig()
-                .with_label("Example Screen A")
-                .with_size(ComponentSize{children(), pixels(50.f)})
-                .with_color_usage(afterhours::ui::Theme::Usage::Primary)
-                .with_debug_name("example_header"));
-
-        auto body = div(context, mk(panel.ent(), 1),
-                        ComponentConfig()
-                            .with_size(ComponentSize{children(), pixels(500.f)})
-                            .with_flex_direction(FlexDirection::Row)
-                            .with_debug_name("example_body"));
-
-        // Left column
-        auto col_left =
-            div(context, mk(body.ent(), 0),
-                ComponentConfig()
-                    .with_size(ComponentSize{pixels(480.f), children()})
-                    .with_debug_name("example_col_left"));
-        button(context, mk(col_left.ent(), 0),
-               ComponentConfig()
-                   .with_label("Action")
-                   .with_size(ComponentSize{pixels(220.f), pixels(50.f)})
-                   .with_debug_name("example_action_button"));
-        static bool ex_cb = true;
-        checkbox(context, mk(col_left.ent(), 1), ex_cb,
-                 ComponentConfig()
-                     .with_label("Enabled")
-                     .with_size(ComponentSize{pixels(220.f), pixels(50.f)})
-                     .with_debug_name("example_enabled_checkbox"));
-
-        // Right column
-        auto col_right =
-            div(context, mk(body.ent(), 1),
-                ComponentConfig()
-                    .with_size(ComponentSize{pixels(520.f), children()})
-                    .with_debug_name("example_col_right"));
-        static float ex_slider = 0.75f;
-        slider(context, mk(col_right.ent(), 0), ex_slider,
-               ComponentConfig()
-                   .with_label("Strength")
-                   .with_size(ComponentSize{pixels(300.f), pixels(50.f)})
-                   .with_debug_name("example_strength_slider"));
-
-        // Close button at bottom
-        if (button(context, mk(panel.ent(), 2),
-                   ComponentConfig()
-                       .with_label("Close")
-                       .with_size(ComponentSize{pixels(220.f), pixels(50.f)})
-                       .with_debug_name("examples_close"))) {
-          examples.showing = false;
-        }
-      }
-      break;
-    }
-    case 1: {
-      // Buttons page: buttons and button groups
-      div(context, mk(content.ent(), 0),
-          ComponentConfig()
-              .with_label("Buttons & Button Groups")
-              .with_size(ComponentSize{children(), pixels(40.f)})
-              .with_skip_tabbing(true)
-              .with_debug_name("buttons_header"));
-
-      auto row = div(context, mk(content.ent(), 1),
-                     ComponentConfig()
-                         .with_size(ComponentSize{percent(1.f), children()})
-                         .with_flex_direction(FlexDirection::Row)
-                         .with_debug_name("buttons_row"));
-
-      button(context, mk(row.ent(), 0),
-             ComponentConfig().with_label("Primary"));
-      button(context, mk(row.ent(), 1),
-             ComponentConfig().with_label("Disabled").with_disabled(true));
-
-      const std::vector<std::string> labels = {"One", "Two", "Three"};
-      button_group(context, mk(row.ent(), 2), labels,
-                   ComponentConfig()
-                       .with_size(ComponentSize{pixels(300.f), pixels(50.f)})
-                       .with_flex_direction(FlexDirection::Row)
-                       .with_debug_name("btn_group_row"));
-
-      button_group(context, mk(content.ent(), 2), labels,
-                   ComponentConfig()
-                       .with_size(ComponentSize{pixels(200.f), children()})
-                       .with_flex_direction(FlexDirection::Column)
-                       .with_debug_name("btn_group_col"));
-      break;
-    }
-    case 2: {
-      // Layout page: rows, columns, sizing
-      div(context, mk(content.ent(), 0),
-          ComponentConfig()
-              .with_label("Layout: Row/Column, Percent/Pixel sizes")
-              .with_size(ComponentSize{children(), pixels(40.f)})
-              .with_skip_tabbing(true)
-              .with_debug_name("layout_header"));
-
-      auto row = div(context, mk(content.ent(), 1),
-                     ComponentConfig()
-                         .with_size(ComponentSize{percent(1.f), pixels(80.f)})
-                         .with_flex_direction(FlexDirection::Row)
-                         .with_debug_name("layout_row"));
-      div(context, mk(row.ent(), 0),
-          ComponentConfig()
-              .with_label("33%")
-              .with_size(ComponentSize{percent(0.33f), children()})
-              .with_debug_name("layout_row_a"));
-      div(context, mk(row.ent(), 1),
-          ComponentConfig()
-              .with_label("34%")
-              .with_size(ComponentSize{percent(0.34f), children()})
-              .with_debug_name("layout_row_b"));
-      div(context, mk(row.ent(), 2),
-          ComponentConfig()
-              .with_label("33%")
-              .with_size(ComponentSize{percent(0.33f), children()})
-              .with_debug_name("layout_row_c"));
-
-      auto column = div(context, mk(content.ent(), 2),
-                        ComponentConfig()
-                            .with_size(ComponentSize{children(), children()})
-                            .with_flex_direction(FlexDirection::Column)
-                            .with_debug_name("layout_column"));
-      div(context, mk(column.ent(), 0),
-          ComponentConfig()
-              .with_label("100px")
-              .with_size(ComponentSize{children(), pixels(100.f)})
-              .with_debug_name("layout_col_a"));
-      div(context, mk(column.ent(), 1),
-          ComponentConfig()
-              .with_label("children() height")
-              .with_size(ComponentSize{children(), children()})
-              .with_debug_name("layout_col_b"));
-      break;
-    }
-    default:
-      break;
-    }
-  }
-};
+// Duplicated in src/ui_demo/router.h/cpp
 
 // Injects test inputs from the playback config each frame
 struct ActionPlaybackSystem : System<> {

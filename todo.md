@@ -1,14 +1,19 @@
 ## UI Afterhours Showcase Backlog
 
-This is a big, categorized backlog of ideas to build out the example app and comprehensively demo the Afterhours UI plugin and related systems. Use it as a menu; check off in any order.
+grab an item from the list, 
+implement the item 
+remove the item from the list 
+commit the item 
+repeat
 
 - command line argument to not have any actual window, and just pretend 
+- add delay so that a viewer can see whats going on 
+- add support for headless mode 
+- use nlohman for json 
+- come up with a strategy for us to label tests exhaustively (like an enum for HasLabel, Colors to test, disabled/nondisabled) this will give us a way to make sure we have one test for each variant. 
+- add a new test for all the button variants 
+- add a test for different layouts for div
 
-### What’s already shown in `src/main.cpp`
-- [x] Basic ECS bootstrapping, window, systems wiring
-- [x] Immediate UI root container via `div`
-- [x] Core widgets: `button`, `checkbox`, `slider`, `dropdown`
-- [x] Input mapping for `WidgetNext`, `WidgetBack`, `WidgetPress`, value up/down
 
 ## Core UI components and patterns
 - [ ] Button group: showcase `button_group` (horizontal and vertical)
