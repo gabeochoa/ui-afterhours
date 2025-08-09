@@ -1,0 +1,12 @@
+autoquit = true
+dump_path = "ui_tree.json"
+
+# Steps are applied one per frame. Use WidgetNext to move focus to the right arrow,
+# then press to advance to the next page in the navigation bar.
+
+[[step]]
+pressed = ["WidgetNext"]
+
+[[step]]
+pressed = ["WidgetPress"]
+
