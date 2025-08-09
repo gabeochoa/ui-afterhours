@@ -89,6 +89,11 @@ enum class InputAction {
 
 using afterhours::input;
 
+// Demo state stored on the root entity to hold current page selection, etc.
+struct DemoState : public BaseComponent {
+  size_t current_page_index = 0;
+};
+
 auto get_mapping() {
   std::map<InputAction, input::ValidInputs> mapping;
   mapping[InputAction::WidgetNext] = {
@@ -147,12 +152,187 @@ struct SimpleUISystem : System<afterhours::ui::UIContext<InputAction>> {
     using namespace afterhours::ui;
     using namespace afterhours::ui::imm;
 
-    div(context, mk(entity),
-        ComponentConfig().with_label("Hello from Afterhours!"));
-    fmt::print("SimpleUISystem: UI context accessible, entity ID: {}\n",
-               entity.id);
-    fmt::print("SimpleUISystem: Entity has AutoLayoutRoot: {}\n",
-               entity.has<ui::AutoLayoutRoot>());
+    // Root container
+    auto root = div(context, mk(entity),
+                    ComponentConfig().with_size(
+                        ComponentSize{pixels(600.f), pixels(300.f)}));
+
+    // Static state variables for interactive components
+    static bool checkbox_value = false;
+    static float slider_value = 0.5f;
+    static size_t dropdown_index = 0;
+
+    // Demonstrate each component type
+    button(context, mk(root.ent(), 0), ComponentConfig().with_label("Press"));
+    checkbox(context, mk(root.ent(), 1), checkbox_value,
+             ComponentConfig().with_label("Check me"));
+    slider(context, mk(root.ent(), 2), slider_value,
+           ComponentConfig().with_label("Volume"));
+    const std::vector<std::string> colors = {"Red", "Green", "Blue"};
+    dropdown(context, mk(root.ent(), 3), colors, dropdown_index,
+             ComponentConfig().with_label("Color"));
+  }
+};
+
+// Router system: renders a navigation bar and routes to the active demo page
+struct DemoRouter : System<afterhours::ui::UIContext<InputAction>> {
+  using UIX = afterhours::ui::UIContext<InputAction>;
+
+  virtual void for_each_with(Entity &entity, UIX &context, float) override {
+    using namespace afterhours::ui;
+    using namespace afterhours::ui::imm;
+
+    // Ensure demo state exists
+    DemoState &state = entity.addComponentIfMissing<DemoState>();
+
+    // Page registry
+    static const std::vector<std::string> page_names = {
+        "Home",
+        "Buttons",
+        "Layout",
+    };
+
+    // Root container for all demo UI
+    auto root = div(context, mk(entity, 1000),
+                    ComponentConfig()
+                        .with_size(ComponentSize{pixels(1100.f), pixels(650.f)})
+                        .with_flex_direction(FlexDirection::Column)
+                        .with_debug_name("demo_root"));
+
+    // Top navigation bar
+    size_t nav_index = state.current_page_index;
+    navigation_bar(context, mk(root.ent(), 0), page_names, nav_index,
+                   ComponentConfig()
+                       .with_size(ComponentSize{percent(1.f), pixels(50.f)})
+                       .with_flex_direction(FlexDirection::Row)
+                       .with_debug_name("nav_bar"));
+    state.current_page_index = nav_index;
+
+    // Main content area
+    auto content = div(context, mk(root.ent(), 1),
+                       ComponentConfig()
+                           .with_size(ComponentSize{percent(1.f), children()})
+                           .with_flex_direction(FlexDirection::Column)
+                           .with_debug_name("content"));
+
+    // Render active page
+    switch (state.current_page_index) {
+    case 0: {
+      // Home page: intro + compact gallery
+      div(context, mk(content.ent(), 0),
+          ComponentConfig()
+              .with_label(
+                  "Afterhours UI Demo: Use the nav bar to switch pages.")
+              .with_size(ComponentSize{children(), pixels(50.f)})
+              .with_skip_tabbing(true)
+              .with_debug_name("home_intro"));
+
+      auto gallery = div(context, mk(content.ent(), 1),
+                         ComponentConfig()
+                             .with_size(ComponentSize{percent(1.f), children()})
+                             .with_flex_direction(FlexDirection::Row)
+                             .with_debug_name("home_gallery"));
+
+      // Mini-gallery widgets
+      static bool home_checkbox = false;
+      static float home_slider = 0.25f;
+      static size_t home_dd = 0;
+      const std::vector<std::string> dd_opts = {"Red", "Green", "Blue"};
+
+      button(context, mk(gallery.ent(), 0),
+             ComponentConfig().with_label("Button"));
+      checkbox(context, mk(gallery.ent(), 1), home_checkbox,
+               ComponentConfig().with_label("Checkbox"));
+      slider(context, mk(gallery.ent(), 2), home_slider,
+             ComponentConfig().with_label("Slider"));
+      dropdown(context, mk(gallery.ent(), 3), dd_opts, home_dd,
+               ComponentConfig().with_label("Dropdown"));
+      break;
+    }
+    case 1: {
+      // Buttons page: buttons and button groups
+      div(context, mk(content.ent(), 0),
+          ComponentConfig()
+              .with_label("Buttons & Button Groups")
+              .with_size(ComponentSize{children(), pixels(40.f)})
+              .with_skip_tabbing(true)
+              .with_debug_name("buttons_header"));
+
+      auto row = div(context, mk(content.ent(), 1),
+                     ComponentConfig()
+                         .with_size(ComponentSize{percent(1.f), children()})
+                         .with_flex_direction(FlexDirection::Row)
+                         .with_debug_name("buttons_row"));
+
+      button(context, mk(row.ent(), 0),
+             ComponentConfig().with_label("Primary"));
+      button(context, mk(row.ent(), 1),
+             ComponentConfig().with_label("Disabled").with_disabled(true));
+
+      const std::vector<std::string> labels = {"One", "Two", "Three"};
+      button_group(context, mk(row.ent(), 2), labels,
+                   ComponentConfig()
+                       .with_size(ComponentSize{pixels(300.f), pixels(50.f)})
+                       .with_flex_direction(FlexDirection::Row)
+                       .with_debug_name("btn_group_row"));
+
+      button_group(context, mk(content.ent(), 2), labels,
+                   ComponentConfig()
+                       .with_size(ComponentSize{pixels(200.f), children()})
+                       .with_flex_direction(FlexDirection::Column)
+                       .with_debug_name("btn_group_col"));
+      break;
+    }
+    case 2: {
+      // Layout page: rows, columns, sizing
+      div(context, mk(content.ent(), 0),
+          ComponentConfig()
+              .with_label("Layout: Row/Column, Percent/Pixel sizes")
+              .with_size(ComponentSize{children(), pixels(40.f)})
+              .with_skip_tabbing(true)
+              .with_debug_name("layout_header"));
+
+      auto row = div(context, mk(content.ent(), 1),
+                     ComponentConfig()
+                         .with_size(ComponentSize{percent(1.f), pixels(80.f)})
+                         .with_flex_direction(FlexDirection::Row)
+                         .with_debug_name("layout_row"));
+      div(context, mk(row.ent(), 0),
+          ComponentConfig()
+              .with_label("33%")
+              .with_size(ComponentSize{percent(0.33f), children()})
+              .with_debug_name("layout_row_a"));
+      div(context, mk(row.ent(), 1),
+          ComponentConfig()
+              .with_label("34%")
+              .with_size(ComponentSize{percent(0.34f), children()})
+              .with_debug_name("layout_row_b"));
+      div(context, mk(row.ent(), 2),
+          ComponentConfig()
+              .with_label("33%")
+              .with_size(ComponentSize{percent(0.33f), children()})
+              .with_debug_name("layout_row_c"));
+
+      auto column = div(context, mk(content.ent(), 2),
+                        ComponentConfig()
+                            .with_size(ComponentSize{children(), children()})
+                            .with_flex_direction(FlexDirection::Column)
+                            .with_debug_name("layout_column"));
+      div(context, mk(column.ent(), 0),
+          ComponentConfig()
+              .with_label("100px")
+              .with_size(ComponentSize{children(), pixels(100.f)})
+              .with_debug_name("layout_col_a"));
+      div(context, mk(column.ent(), 1),
+          ComponentConfig()
+              .with_label("children() height")
+              .with_size(ComponentSize{children(), children()})
+              .with_debug_name("layout_col_b"));
+      break;
+    }
+    default:
+      break;
+    }
   }
 };
 
@@ -168,7 +348,9 @@ int main(void) {
   auto &Sophie = EntityHelper::createEntity();
   {
     input::add_singleton_components<InputAction>(Sophie, get_mapping());
-    window_manager::add_singleton_components(Sophie, 200);
+    // Set desired starting resolution
+    window_manager::Resolution startRez{1920, 1080};
+    window_manager::add_singleton_components(Sophie, startRez, 200);
     ui::add_singleton_components<InputAction>(Sophie);
 
     // Add AutoLayoutRoot component - required for UI elements
@@ -201,7 +383,7 @@ int main(void) {
       // Register our UI system between before and after UI updates
       systems.register_update_system(
           std::make_unique<SetupUIStylingDefaults>());
-      systems.register_update_system(std::make_unique<SimpleUISystem>());
+      systems.register_update_system(std::make_unique<DemoRouter>());
     }
     ui::register_after_ui_updates<InputAction>(systems);
   }

@@ -33,9 +33,9 @@ CXX := clang++
 all: build
 
 build:
-	$(CXX) $(FLAGS) $(NOFLAGS) $(INCLUDES) $(LIBS) src/main.cpp -o $(OUTPUT_EXE)
+	$(CXX) $(FLAGS) $(NOFLAGS) $(INCLUDES) $(LIBS) src/main.cpp -o $(OUTPUT_EXE) && say compile done
 
-run: build
+run: 
 	./$(OUTPUT_EXE)
 
 sub:
