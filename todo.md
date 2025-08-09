@@ -6,7 +6,6 @@ remove the item from the list
 commit the item 
 repeat
 
-- command line argument to not have any actual window, and just pretend 
 - add delay so that a viewer can see whats going on 
 - add support for headless mode 
 - use nlohman for json 

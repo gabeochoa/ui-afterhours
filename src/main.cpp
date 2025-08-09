@@ -30,11 +30,11 @@ inline void log_once_per(...) {
 
 //
 // These are already set and included by rl.h; avoid redefining them here
-//#define AFTER_HOURS_DEBUG
-//#define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
-//#define AFTER_HOURS_REPLACE_LOGGING
-//#include <afterhours/ah.h>
-//#define AFTER_HOURS_USE_RAYLIB
+// #define AFTER_HOURS_DEBUG
+// #define AFTER_HOURS_INCLUDE_DERIVED_CHILDREN
+// #define AFTER_HOURS_REPLACE_LOGGING
+// #include <afterhours/ah.h>
+// #define AFTER_HOURS_USE_RAYLIB
 #include "afterhours/src/developer.h"
 #include "afterhours/src/font_helper.h"
 #include "afterhours/src/plugins/autolayout.h"
@@ -275,6 +275,22 @@ struct ActionPlaybackSystem : System<> {
 int main(int argc, char **argv) {
   const int screenWidth = 1280;
   const int screenHeight = 720;
+
+  // Pre-parse CLI for headless/no-window mode so we can set flags before
+  // InitWindow
+  bool start_hidden_window = false;
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--no-window" || arg == "--headless") {
+      start_hidden_window = true;
+    }
+  }
+  if (start_hidden_window) {
+    // Hide the window but still initialize raylib so systems depending on it
+    // work
+    raylib::SetConfigFlags(raylib::FLAG_WINDOW_HIDDEN);
+    log_info("Starting in hidden window mode (--no-window)");
+  }
 
   raylib::InitWindow(screenWidth, screenHeight,
                      "UI Afterhours - Component Showcase");
