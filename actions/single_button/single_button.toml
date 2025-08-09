@@ -1,0 +1,10 @@
+autoquit = true
+dump_path = "ui_tree.json"
+
+# Open the deterministic examples overlay from Home
+[[step]]
+pressed = ["WidgetNext"]
+
+[[step]]
+pressed = ["WidgetPress"]
+
