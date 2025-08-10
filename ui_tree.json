@@ -1,0 +1,472 @@
+{
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [],
+                "id": 3,
+                "name": "left_arrow",
+                "rect": {
+                  "h": 50.0,
+                  "w": 220.0,
+                  "x": 0.0,
+                  "y": 0.0
+                }
+              },
+              {
+                "children": [],
+                "id": 4,
+                "name": "center_label",
+                "rect": {
+                  "h": 50.0,
+                  "w": 660.0,
+                  "x": 220.0,
+                  "y": 0.0
+                }
+              },
+              {
+                "children": [],
+                "id": 5,
+                "name": "right_arrow",
+                "rect": {
+                  "h": 50.0,
+                  "w": 220.0,
+                  "x": 880.0,
+                  "y": 0.0
+                }
+              }
+            ],
+            "id": 2,
+            "name": "nav_bar",
+            "rect": {
+              "h": 50.0,
+              "w": 1100.0,
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "children": [],
+                    "id": 8,
+                    "name": "home_intro",
+                    "rect": {
+                      "h": 50.0,
+                      "w": 0.0,
+                      "x": 0.0,
+                      "y": 50.0
+                    }
+                  },
+                  {
+                    "children": [],
+                    "id": 9,
+                    "name": "open_examples",
+                    "rect": {
+                      "h": 50.0,
+                      "w": 220.0,
+                      "x": 0.0,
+                      "y": 100.0
+                    }
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [],
+                        "id": 11,
+                        "name": "button",
+                        "rect": {
+                          "h": 50.0,
+                          "w": 200.0,
+                          "x": 0.0,
+                          "y": 150.0
+                        }
+                      },
+                      {
+                        "children": [
+                          {
+                            "children": [],
+                            "id": 13,
+                            "name": "checkbox label ",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 0.0,
+                              "y": 200.0
+                            }
+                          },
+                          {
+                            "children": [],
+                            "id": 14,
+                            "name": "checkbox indiv from ",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 100.0,
+                              "y": 200.0
+                            }
+                          }
+                        ],
+                        "id": 12,
+                        "name": "checkbox_row",
+                        "rect": {
+                          "h": 50.0,
+                          "w": 200.0,
+                          "x": 0.0,
+                          "y": 200.0
+                        }
+                      },
+                      {
+                        "children": [
+                          {
+                            "children": [],
+                            "id": 16,
+                            "name": "slider_text",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 0.0,
+                              "y": 250.0
+                            }
+                          },
+                          {
+                            "children": [
+                              {
+                                "children": [],
+                                "id": 18,
+                                "name": "slider_handle",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 25.0,
+                                  "x": 118.75,
+                                  "y": 250.0
+                                }
+                              }
+                            ],
+                            "id": 17,
+                            "name": "slider_background",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 100.0,
+                              "y": 250.0
+                            }
+                          }
+                        ],
+                        "id": 15,
+                        "name": "slider",
+                        "rect": {
+                          "h": 50.0,
+                          "w": 200.0,
+                          "x": 0.0,
+                          "y": 250.0
+                        }
+                      },
+                      {
+                        "children": [
+                          {
+                            "children": [],
+                            "id": 20,
+                            "name": "dropdown_label",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 0.0,
+                              "y": 300.0
+                            }
+                          },
+                          {
+                            "children": [],
+                            "id": 21,
+                            "name": "option 1",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 100.0,
+                              "x": 100.0,
+                              "y": 300.0
+                            }
+                          },
+                          {
+                            "children": [
+                              {
+                                "children": [],
+                                "id": 23,
+                                "name": "button group 0",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 200.0,
+                                  "x": 200.0,
+                                  "y": 300.0
+                                }
+                              },
+                              {
+                                "children": [],
+                                "id": 24,
+                                "name": "button group 1",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 200.0,
+                                  "x": 200.0,
+                                  "y": 350.0
+                                }
+                              },
+                              {
+                                "children": [],
+                                "id": 25,
+                                "name": "button group 2",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 200.0,
+                                  "x": 200.0,
+                                  "y": 400.0
+                                }
+                              }
+                            ],
+                            "id": 22,
+                            "name": "dropdown button group",
+                            "rect": {
+                              "h": 150.0,
+                              "w": 200.0,
+                              "x": 200.0,
+                              "y": 300.0
+                            }
+                          }
+                        ],
+                        "id": 19,
+                        "name": "",
+                        "rect": {
+                          "h": 50.0,
+                          "w": 200.0,
+                          "x": 0.0,
+                          "y": 300.0
+                        }
+                      }
+                    ],
+                    "id": 10,
+                    "name": "home_gallery",
+                    "rect": {
+                      "h": 200.0,
+                      "w": 1100.0,
+                      "x": 0.0,
+                      "y": 150.0
+                    }
+                  }
+                ],
+                "id": 7,
+                "name": "home_content",
+                "rect": {
+                  "h": 300.0,
+                  "w": 1100.0,
+                  "x": 0.0,
+                  "y": 50.0
+                }
+              }
+            ],
+            "id": 6,
+            "name": "content",
+            "rect": {
+              "h": 300.0,
+              "w": 1100.0,
+              "x": 0.0,
+              "y": 50.0
+            }
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "children": [],
+                    "id": 28,
+                    "name": "example_header",
+                    "rect": {
+                      "h": 50.0,
+                      "w": 0.0,
+                      "x": 50.0,
+                      "y": 25.0
+                    }
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "children": [],
+                            "id": 31,
+                            "name": "example_action_button",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 220.0,
+                              "x": 50.0,
+                              "y": 75.0
+                            }
+                          },
+                          {
+                            "children": [
+                              {
+                                "children": [],
+                                "id": 33,
+                                "name": "checkbox label example_enabled_checkbox",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 100.0,
+                                  "x": 50.0,
+                                  "y": 125.0
+                                }
+                              },
+                              {
+                                "children": [],
+                                "id": 34,
+                                "name": "checkbox indiv from example_enabled_checkbox",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 100.0,
+                                  "x": 150.0,
+                                  "y": 125.0
+                                }
+                              }
+                            ],
+                            "id": 32,
+                            "name": "example_enabled_checkbox",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 220.0,
+                              "x": 50.0,
+                              "y": 125.0
+                            }
+                          }
+                        ],
+                        "id": 30,
+                        "name": "example_col_left",
+                        "rect": {
+                          "h": 100.0,
+                          "w": 480.0,
+                          "x": 50.0,
+                          "y": 75.0
+                        }
+                      },
+                      {
+                        "children": [
+                          {
+                            "children": [
+                              {
+                                "children": [],
+                                "id": 37,
+                                "name": "slider_text",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 150.0,
+                                  "x": 50.0,
+                                  "y": 175.0
+                                }
+                              },
+                              {
+                                "children": [
+                                  {
+                                    "children": [],
+                                    "id": 39,
+                                    "name": "slider_handle",
+                                    "rect": {
+                                      "h": 50.0,
+                                      "w": 38.0,
+                                      "x": 284.375,
+                                      "y": 175.0
+                                    }
+                                  }
+                                ],
+                                "id": 38,
+                                "name": "slider_background",
+                                "rect": {
+                                  "h": 50.0,
+                                  "w": 150.0,
+                                  "x": 200.0,
+                                  "y": 175.0
+                                }
+                              }
+                            ],
+                            "id": 36,
+                            "name": "example_strength_slider",
+                            "rect": {
+                              "h": 50.0,
+                              "w": 300.0,
+                              "x": 50.0,
+                              "y": 175.0
+                            }
+                          }
+                        ],
+                        "id": 35,
+                        "name": "example_col_right",
+                        "rect": {
+                          "h": 50.0,
+                          "w": 520.0,
+                          "x": 50.0,
+                          "y": 175.0
+                        }
+                      }
+                    ],
+                    "id": 29,
+                    "name": "example_body",
+                    "rect": {
+                      "h": 500.0,
+                      "w": 520.0,
+                      "x": 50.0,
+                      "y": 75.0
+                    }
+                  },
+                  {
+                    "children": [],
+                    "id": 40,
+                    "name": "examples_close",
+                    "rect": {
+                      "h": 50.0,
+                      "w": 220.0,
+                      "x": 50.0,
+                      "y": 575.0
+                    }
+                  }
+                ],
+                "id": 27,
+                "name": "examples_panel",
+                "rect": {
+                  "h": 575.0,
+                  "w": 950.0,
+                  "x": 50.0,
+                  "y": 25.0
+                }
+              }
+            ],
+            "id": 26,
+            "name": "examples_overlay",
+            "rect": {
+              "h": 650.0,
+              "w": 1100.0,
+              "x": 0.0,
+              "y": 0.0
+            }
+          }
+        ],
+        "id": 1,
+        "name": "demo_root",
+        "rect": {
+          "h": 650.0,
+          "w": 1100.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      }
+    ],
+    "id": 0,
+    "name": "root",
+    "rect": {
+      "h": -1.0,
+      "w": -1.0,
+      "x": 0.0,
+      "y": 0.0
+    }
+  }
+}

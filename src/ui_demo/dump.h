@@ -1,55 +1,61 @@
 #pragma once
 
 #include <fstream>
-#include <sstream>
 #include <string>
 
 #include "afterhours/src/plugins/ui.h"
 #include "afterhours/src/plugins/ui/components.h"
+#include <nlohmann/json.hpp>
 
 inline void dump_ui_tree_json(const std::string &path) {
   using namespace afterhours::ui;
   afterhours::Entity &root_ent = afterhours::EntityQuery()
                                      .whereHasComponent<AutoLayoutRoot>()
                                      .gen_first_enforce();
-  std::function<void(afterhours::EntityID, std::stringstream &, int)> rec;
-  rec = [&](afterhours::EntityID id, std::stringstream &ss, int depth) {
+
+  std::function<nlohmann::json(afterhours::EntityID)> rec_json;
+  rec_json = [&](afterhours::EntityID id) -> nlohmann::json {
+    nlohmann::json node;
+    node["id"] = id;
+
     auto opt = afterhours::EntityHelper::getEntityForID(id);
     if (!opt) {
-      ss << "{\"id\":" << id
-         << ",\"name\":\"missing\",\"rect\":{\"x\":0,\"y\":0,\"w\":0,\"h\":0},"
-            "\"children\":[]}";
-      return;
+      node["name"] = "missing";
+      node["rect"] = { {"x", 0}, {"y", 0}, {"w", 0}, {"h", 0} };
+      node["children"] = nlohmann::json::array();
+      return node;
     }
+
     afterhours::Entity &e = opt.asE();
     if (!e.has<UIComponent>()) {
-      ss << "{\"id\":" << id
-         << ",\"name\":\"no_uicmp\",\"rect\":{\"x\":0,\"y\":0,\"w\":0,\"h\":0},"
-            "\"children\":[]}";
-      return;
+      node["name"] = "no_uicmp";
+      node["rect"] = { {"x", 0}, {"y", 0}, {"w", 0}, {"h", 0} };
+      node["children"] = nlohmann::json::array();
+      return node;
     }
+
     UIComponent &cmp = e.get<UIComponent>();
     RectangleType r = cmp.rect();
-    std::string name = e.has<UIComponentDebug>()
-                           ? e.get<UIComponentDebug>().name()
-                           : std::string("unknown");
-    ss << "{\"id\":" << id << ",\"name\":\"" << name << "\",";
-    ss << "\"rect\":{\"x\":" << r.x << ",\"y\":" << r.y << ",\"w\":" << r.width
-       << ",\"h\":" << r.height << "},";
-    ss << "\"children\":[";
+    const std::string name = e.has<UIComponentDebug>()
+                                 ? e.get<UIComponentDebug>().name()
+                                 : std::string("unknown");
+
+    node["name"] = name;
+    node["rect"] = { {"x", r.x}, {"y", r.y}, {"w", r.width}, {"h", r.height} };
+
+    nlohmann::json children = nlohmann::json::array();
     for (size_t i = 0; i < cmp.children.size(); ++i) {
-      rec(cmp.children[i], ss, depth + 1);
-      if (i + 1 < cmp.children.size())
-        ss << ",";
+      children.push_back(rec_json(cmp.children[i]));
     }
-    ss << "]}";
+    node["children"] = std::move(children);
+    return node;
   };
-  std::stringstream ss;
-  ss << "{";
-  ss << "\"root\":";
-  rec(root_ent.id, ss, 0);
-  ss << "}";
+
+  nlohmann::json root;
+  root["root"] = rec_json(root_ent.id);
+
   std::ofstream out(path);
-  if (out)
-    out << ss.str();
+  if (out) {
+    out << root.dump(2);
+  }
 }
