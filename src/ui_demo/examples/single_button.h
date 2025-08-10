@@ -11,8 +11,9 @@ namespace examples {
 
 using UIX = afterhours::ui::UIContext<InputAction>;
 
-// Renders the body of Example A into the provided panel entity
-void render_example_a(UIX &context, afterhours::Entity &panel);
+// Example matching the 'single_button' actions scenario
+void render_single_button(UIX &context, afterhours::Entity &panel);
 
 } // namespace examples
 } // namespace ui_demo
+

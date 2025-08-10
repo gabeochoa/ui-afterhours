@@ -152,6 +152,20 @@ load_actions_toml(const std::string &path) {
       cfg.dump_path = *dp;
     // Note: delay is controlled by CLI, not TOML, to keep tests deterministic
 
+    // Derive scenario name from toml path (basename without extension)
+    {
+      std::string base = path;
+      // strip directory
+      size_t slash = base.find_last_of("/\\");
+      if (slash != std::string::npos)
+        base = base.substr(slash + 1);
+      // strip extension
+      size_t dot = base.find_last_of('.');
+      if (dot != std::string::npos)
+        base = base.substr(0, dot);
+      cfg.scenario_name = base;
+    }
+
     if (auto arr = tbl["step"].as_array()) {
       for (toml::node &node : *arr) {
         if (auto tab = node.as_table()) {

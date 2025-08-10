@@ -2,7 +2,7 @@
 #include "afterhours/src/plugins/ui/immediate.h"
 #include "afterhours/src/plugins/ui/systems.h"
 #include "ui_demo/data.h"
-#include "ui_demo/examples/example_a.h"
+#include "ui_demo/examples/single_button.h"
 #include "ui_demo/playback.h"
 
 using namespace afterhours;
@@ -83,15 +83,21 @@ static void render_examples_overlay(DemoRouter::UIX &context,
               .with_color_usage(Theme::Usage::Secondary)
               .with_debug_name("examples_panel"));
 
+  // Title uses scenario name if provided, else default
+  const char *title = "Examples";
+  if (g_playback_config.has_value() &&
+      !g_playback_config->scenario_name.empty()) {
+    title = g_playback_config->scenario_name.c_str();
+  }
   div(context, mk(panel.ent(), 0),
       ComponentConfig()
-          .with_label("Example Screen A")
+          .with_label(title)
           .with_size(ComponentSize{children(), pixels(50.f)})
           .with_color_usage(Theme::Usage::Primary)
           .with_debug_name("example_header"));
 
-  // Body of current example screen
-  ui_demo::examples::render_example_a(context, panel.ent());
+  // Body of current example screen (match actions/single_button)
+  ui_demo::examples::render_single_button(context, panel.ent());
 
   if (button(context, mk(panel.ent(), 2),
              ComponentConfig()
