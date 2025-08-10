@@ -1,6 +1,7 @@
 #include "router.h"
 #include "afterhours/src/plugins/ui/immediate.h"
 #include "afterhours/src/plugins/ui/systems.h"
+#include "ui_demo/data.h"
 #include "ui_demo/playback.h"
 
 using namespace afterhours;
@@ -44,7 +45,8 @@ static void render_home_page(DemoRouter::UIX &context,
   static bool home_checkbox = false;
   static float home_slider = 0.25f;
   static size_t home_dd = 0;
-  const std::vector<std::string> dd_opts = {"Red", "Green", "Blue"};
+  const std::vector<std::string> &dd_opts =
+      ui_demo::data::basic_color_options_vec();
 
   button(context, mk(gallery.ent(), 0), ComponentConfig().with_label("Button"));
   checkbox(context, mk(gallery.ent(), 1), home_checkbox,
@@ -138,8 +140,7 @@ void DemoRouter::for_each_with(afterhours::Entity &entity, UIX &context,
   DemoState &state = entity.addComponentIfMissing<DemoState>();
   ExampleState &examples = entity.addComponentIfMissing<ExampleState>();
 
-  static const std::vector<std::string> page_names = {"Home", "Buttons",
-                                                      "Layout"};
+  const std::vector<std::string> &page_names = ui_demo::data::page_names_vec();
 
   auto root = div(context, mk(entity, 1000),
                   ComponentConfig()
