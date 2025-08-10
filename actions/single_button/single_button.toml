@@ -1,6 +1,5 @@
 autoquit = true
 dump_path = "ui_tree.json"
-step_delay_ms = 300
 
 # Open the deterministic examples overlay from Home
 [[step]]
