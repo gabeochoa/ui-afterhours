@@ -1,0 +1,58 @@
+{
+    "root": {
+        "name": "root",
+        "children": [
+            {
+                "name": "demo_root",
+                "children": [
+                    {
+                        "name": "nav_bar"
+                    },
+                    {
+                        "name": "content"
+                    },
+                    {
+                        "name": "examples_overlay",
+                        "children": [
+                            {
+                                "name": "examples_panel",
+                                "children": [
+                                    {
+                                        "name": "example_header"
+                                    },
+                                    {
+                                        "name": "example_body",
+                                        "children": [
+                                            {
+                                                "name": "example_col_left",
+                                                "children": [
+                                                    {
+                                                        "name": "example_action_button"
+                                                    },
+                                                    {
+                                                        "name": "example_enabled_checkbox"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "name": "example_col_right",
+                                                "children": [
+                                                    {
+                                                        "name": "example_strength_slider"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "name": "examples_close"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+}

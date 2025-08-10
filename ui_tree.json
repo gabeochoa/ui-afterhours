@@ -310,7 +310,7 @@
                             "children": [
                               {
                                 "children": [],
-                                "id": 33,
+                                "id": 34,
                                 "name": "checkbox label example_enabled_checkbox",
                                 "rect": {
                                   "h": 50.0,
@@ -321,7 +321,7 @@
                               },
                               {
                                 "children": [],
-                                "id": 34,
+                                "id": 35,
                                 "name": "checkbox indiv from example_enabled_checkbox",
                                 "rect": {
                                   "h": 50.0,
@@ -331,11 +331,11 @@
                                 }
                               }
                             ],
-                            "id": 32,
+                            "id": 33,
                             "name": "example_enabled_checkbox",
                             "rect": {
                               "h": 50.0,
-                              "w": 220.0,
+                              "w": 200.0,
                               "x": 50.0,
                               "y": 125.0
                             }
@@ -360,7 +360,7 @@
                                 "name": "slider_text",
                                 "rect": {
                                   "h": 50.0,
-                                  "w": 150.0,
+                                  "w": 100.0,
                                   "x": 50.0,
                                   "y": 175.0
                                 }
@@ -373,8 +373,8 @@
                                     "name": "slider_handle",
                                     "rect": {
                                       "h": 50.0,
-                                      "w": 38.0,
-                                      "x": 284.375,
+                                      "w": 25.0,
+                                      "x": 187.5,
                                       "y": 175.0
                                     }
                                   }
@@ -383,8 +383,8 @@
                                 "name": "slider_background",
                                 "rect": {
                                   "h": 50.0,
-                                  "w": 150.0,
-                                  "x": 200.0,
+                                  "w": 100.0,
+                                  "x": 150.0,
                                   "y": 175.0
                                 }
                               }
@@ -393,17 +393,17 @@
                             "name": "example_strength_slider",
                             "rect": {
                               "h": 50.0,
-                              "w": 300.0,
+                              "w": 200.0,
                               "x": 50.0,
                               "y": 175.0
                             }
                           }
                         ],
-                        "id": 35,
+                        "id": 32,
                         "name": "example_col_right",
                         "rect": {
                           "h": 50.0,
-                          "w": 520.0,
+                          "w": 480.0,
                           "x": 50.0,
                           "y": 175.0
                         }
@@ -413,7 +413,7 @@
                     "name": "example_body",
                     "rect": {
                       "h": 500.0,
-                      "w": 520.0,
+                      "w": 480.0,
                       "x": 50.0,
                       "y": 75.0
                     }

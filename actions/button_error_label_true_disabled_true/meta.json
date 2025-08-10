@@ -1,0 +1,6 @@
+{
+  "type": "button",
+  "hasLabel": true,
+  "color": "Error",
+  "disabled": true
+}

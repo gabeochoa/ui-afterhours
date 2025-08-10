@@ -76,7 +76,8 @@ function matchNode(expected, actual, errs, pathStr) {
 function runScenario(dir) {
   const files = fs.readdirSync(dir);
   const tomls = files.filter(f => f.toLowerCase().endsWith('.toml'));
-  const jsons = files.filter(f => f.toLowerCase().endsWith('.json'));
+  // Ignore meta.json when selecting the expected JSON file
+  const jsons = files.filter(f => f.toLowerCase().endsWith('.json') && f.toLowerCase() !== 'meta.json');
   if (tomls.length !== 1 || jsons.length !== 1) {
     throw new Error(`Scenario '${path.basename(dir)}' must contain exactly one .toml and one .json`);
   }

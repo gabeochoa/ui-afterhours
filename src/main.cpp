@@ -166,6 +166,19 @@ load_actions_toml(const std::string &path) {
       cfg.scenario_name = base;
     }
 
+    // Optional button table
+    if (auto btn = tbl["button"].as_table()) {
+      if (auto hl = (*btn)["hasLabel"].value<bool>()) {
+        cfg.button_has_label = *hl;
+      }
+      if (auto col = (*btn)["color"].value<std::string>()) {
+        cfg.button_color = *col;
+      }
+      if (auto dis = (*btn)["disabled"].value<bool>()) {
+        cfg.button_disabled = *dis;
+      }
+    }
+
     if (auto arr = tbl["step"].as_array()) {
       for (toml::node &node : *arr) {
         if (auto tab = node.as_table()) {
@@ -343,7 +356,7 @@ int main(int argc, char **argv) {
           ms = 0;
         g_step_delay_seconds = static_cast<float>(ms) / 1000.0f;
       } catch (...) {
-        log_warn("Invalid --delay value: '{}', ignoring", v);
+        log_warn("Invalid --delay value: '{}'", v);
       }
     }
   }

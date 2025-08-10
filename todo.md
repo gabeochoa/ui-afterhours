@@ -6,9 +6,8 @@ remove the item from the list
 commit the item 
 repeat
 
-- come up with a strategy for us to label tests exhaustively (like an enum for HasLabel, Colors to test, disabled/nondisabled) this will give us a way to make sure we have one test for each variant. 
-- add a new test for all the button variants 
 - add a test for different layouts for div
+- fix delay so it also waits after it finishes running 
 
 
 ## Core UI components and patterns

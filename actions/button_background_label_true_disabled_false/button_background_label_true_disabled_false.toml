@@ -1,0 +1,13 @@
+autoquit = true
+dump_path = "ui_tree.json"
+
+[button]
+hasLabel = true
+color = "Background"
+disabled = false
+
+[[step]]
+pressed = ["WidgetNext"]
+
+[[step]]
+pressed = ["WidgetPress"]
