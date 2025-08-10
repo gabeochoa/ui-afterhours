@@ -2,7 +2,7 @@
 #include "afterhours/src/plugins/ui/immediate.h"
 #include "afterhours/src/plugins/ui/systems.h"
 #include "ui_demo/data.h"
-#include "ui_demo/examples/single_button.h"
+#include "ui_demo/examples/examples.h"
 #include "ui_demo/playback.h"
 
 using namespace afterhours;
