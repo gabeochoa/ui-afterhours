@@ -95,8 +95,8 @@ function runScenario(dir) {
     }
   }
 
-  // Run ui.exe with actions
-  const run = spawnSync(UI_EXE, [ `--actions=${tomlPath}` ], { cwd: REPO_ROOT, stdio: 'inherit' });
+  // Run ui.exe with actions in headless mode
+  const run = spawnSync(UI_EXE, [ `--actions=${tomlPath}`, `--no-window` ], { cwd: REPO_ROOT, stdio: 'inherit' });
   if (run.status !== 0) {
     throw new Error(`ui.exe exited with code ${run.status} for scenario '${path.basename(dir)}'`);
   }
