@@ -83,6 +83,17 @@ function runScenario(dir) {
   const tomlPath = path.join(dir, tomls[0]);
   const expectedPath = path.join(dir, jsons[0]);
 
+  // Optional metadata tags per scenario
+  let meta = {};
+  const metaPath = path.join(dir, 'meta.json');
+  if (fs.existsSync(metaPath)) {
+    try {
+      meta = readJson(metaPath);
+    } catch (e) {
+      console.warn(`[WARN] Invalid meta.json in '${path.basename(dir)}': ${e.message}`);
+    }
+  }
+
   // Run ui.exe with actions
   const run = spawnSync(UI_EXE, [ `--actions=${tomlPath}` ], { cwd: REPO_ROOT, stdio: 'inherit' });
   if (run.status !== 0) {
@@ -96,7 +107,7 @@ function runScenario(dir) {
   const actual = readJson(ACTUAL_JSON);
   const errs = [];
   const ok = matchNode(expected.root, actual.root, errs, 'root');
-  return { ok, errs };
+  return { ok, errs, meta };
 }
 
 function findScenarios(rootDir, filter) {
@@ -122,14 +133,16 @@ function main() {
   let passed = 0;
   let failed = 0;
   const results = [];
+  const tags = [];
   for (const dir of scenarios) {
     const name = path.basename(dir);
     try {
-      const { ok, errs } = runScenario(dir);
+      const { ok, errs, meta } = runScenario(dir);
       if (ok) {
         console.log(`[PASS] ${name}`);
         passed++;
         results.push({ name, ok });
+        tags.push({ name, meta });
       } else {
         console.log(`[FAIL] ${name}`);
         errs.forEach(e => console.log('  - ' + e));
@@ -144,6 +157,47 @@ function main() {
   }
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed`);
+
+   // Coverage reporting for button variants
+   const REQUIRED = {
+     button: {
+       hasLabel: [true, false],
+       color: ['Primary','Secondary','Accent','Error','Background'],
+       disabled: [true, false],
+     }
+   };
+
+   const buttonTags = tags.filter(t => t.meta && t.meta.type === 'button');
+   const seen = new Set();
+   for (const t of buttonTags) {
+     const hl = String(t.meta.hasLabel);
+     const color = String(t.meta.color);
+     const dis = String(t.meta.disabled);
+     seen.add(`${hl}|${color}|${dis}`);
+   }
+
+   const missing = [];
+   for (const hl of REQUIRED.button.hasLabel) {
+     for (const color of REQUIRED.button.color) {
+       for (const dis of REQUIRED.button.disabled) {
+         const key = `${hl}|${color}|${dis}`;
+         if (!seen.has(key)) missing.push({ hasLabel: hl, color, disabled: dis });
+       }
+     }
+   }
+
+   if (missing.length > 0) {
+     console.log(`\n[Coverage] Missing button combinations (${missing.length}):`);
+     for (const m of missing) {
+       console.log(`  - hasLabel=${m.hasLabel}, color=${m.color}, disabled=${m.disabled}`);
+     }
+     if (process.env.REQUIRE_COVERAGE === '1') {
+       process.exit(1);
+     }
+   } else {
+     console.log(`\n[Coverage] Button variants fully covered.`);
+   }
+
   process.exit(failed === 0 ? 0 : 1);
 }
 
