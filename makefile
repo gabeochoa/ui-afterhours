@@ -13,7 +13,7 @@ NOFLAGS = -Wno-deprecated-volatile -Wno-missing-field-initializers \
 INCLUDES = -Ivendor/ -Isrc/ 
 LIBS = -L. -Lvendor/ $(RAYLIB_LIB)
 
-SRC_FILES := $(wildcard src/*.cpp src/**/*.cpp)
+SRC_FILES := $(wildcard src/*.cpp src/**/*.cpp src/ui_demo/examples/*.cpp)
 H_FILES := $(wildcard src/**/*.h src/**/*.hpp)
 OBJ_DIR := ./output
 OBJ_FILES := $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
